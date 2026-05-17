@@ -121,7 +121,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
     <div class="login-sub">Escolha seu perfil de acesso</div>
     <button class="btn btn-primary login-btn" onclick="loginAsAdmin()">👑 Administrador</button>
     <button class="btn btn-outline login-btn" onclick="loginAsUser()">👤 Usuário</button>
-    <div style="font-size:11px;color:var(--text3);margin-top:16px;">v3.01.00</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:16px;">v3.02.00</div>
   </div>
 </div>
 
@@ -133,7 +133,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
         <div class="header-sub" id="header-sub">Selecione um cliente para iniciar</div>
       </div>
       <div style="text-align:right;">
-        <div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;">v3.01.00</div>
+        <div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;">v3.02.00</div>
         <div id="user-badge" style="font-size:9px;color:var(--accent2);font-weight:700;margin-top:2px;text-transform:uppercase;"></div>
       </div>
     </div>
@@ -247,13 +247,71 @@ function setupAdmin() {
   DB.save('csn_recoveryemail', email);
   DB.save('csn_recoverykey', key);
   
-  const subject = encodeURIComponent("Chave de Segurança - App Consignado");
-  const body = encodeURIComponent(`Olá!\n\nSua chave de recuperação para o App Consignado é:\n\n${key}\n\nGuarde este e-mail com cuidado. Você precisará desta chave caso esqueça sua senha de administrador.`);
+  const subject = encodeURIComponent("Chave de Segurança - Venda Consignada");
+  const body = encodeURIComponent(`Olá!\n\nSua chave de recuperação para o App Venda Consignada é:\n\n${key}\n\nGuarde este e-mail com cuidado. Você precisará desta chave caso esqueça sua senha de administrador.`);
+  
+  // Resetar a tela de login para o estado normal (com os dois botões)
+  renderLoginScreen();
+  
   window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
   
   closeModal();
   doLogin('admin');
   toast('Chave enviada para o seu e-mail!', 'ok');
+}
+
+function renderLoginScreen() {
+  document.getElementById('login-screen').innerHTML = `
+    <div class="login-card">
+      <div class="login-logo">📦</div>
+      <div class="login-title">Venda Consignada</div>
+      <div class="login-sub">Escolha seu perfil de acesso</div>
+      <button class="btn btn-primary login-btn" onclick="loginAsAdmin()">👑 Administrador</button>
+      <button class="btn btn-outline login-btn" onclick="loginAsUser()">👤 Usuário</button>
+      <div style="display:flex;align-items:center;justify-content:center;gap:4px;margin-top:16px;">
+        <span style="font-size:11px;color:var(--text3);">v3.02.00</span>
+        <button onclick="showChangelog()" style="background:none;border:none;color:var(--accent2);font-size:14px;cursor:pointer;padding:4px;">❓</button>
+      </div>
+    </div>
+  `;
+}
+
+const CHANGELOG = [
+  { v: 'v3.02.00', t: 'Funcionalidade', d: 'Adicionado Histórico de Atualizações (Changelog) e correção no fluxo de login pós-cadastro.' },
+  { v: 'v3.01.00', t: 'Segurança', d: 'Implementado fluxo obrigatório de configuração de Admin no primeiro acesso.' },
+  { v: 'v3.00.01', t: 'Correção', d: 'Corrigida visibilidade do modal de senha (z-index) e renomeado para Venda Consignada.' },
+  { v: 'v3.0', t: 'Interface', d: 'Reestruturação completa da tela de login com botões independentes.' },
+  { v: 'v2.9', t: 'Correção', d: 'Ajuste na lógica de botões de login para evitar inversão de perfis.' },
+  { v: 'v2.8', t: 'Performance', d: 'Login instantâneo e independência de carregamento de bibliotecas externas.' },
+  { v: 'v2.7', t: 'Segurança', d: 'Sistema de recuperação de senha via e-mail com chave de segurança única.' },
+  { v: 'v2.6', t: 'Segurança', d: 'Proteção por senha para o perfil de Administrador.' },
+  { v: 'v2.5', t: 'Funcionalidade', d: 'Sistema de login com níveis de acesso (Admin e Usuário).' },
+  { v: 'v2.4', t: 'Interface', d: 'Atualização visual da versão e selos de identificação de perfil.' }
+];
+
+function showChangelog() {
+  let html = `
+    <div class="modal-handle"></div>
+    <div class="modal-title">Histórico de Versões</div>
+    <div class="modal-sub">Confira as últimas melhorias do sistema.</div>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px;">
+  `;
+  
+  CHANGELOG.forEach(item => {
+    const color = item.t === 'Segurança' ? 'var(--red)' : (item.t === 'Correção' ? 'var(--amber)' : 'var(--accent2)');
+    html += `
+      <div style="background:var(--bg3);padding:12px;border-radius:var(--radius-sm);border-left:3px solid ${color};">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+          <span style="font-weight:700;font-size:13px;">${item.v}</span>
+          <span style="font-size:10px;text-transform:uppercase;font-weight:800;color:${color}">${item.t}</span>
+        </div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.4;">${item.d}</div>
+      </div>
+    `;
+  });
+  
+  html += `</div><button class="btn btn-primary" onclick="closeModal()">Fechar</button>`;
+  showModal(html);
 }
 
 function checkAdminPass() {
@@ -1109,7 +1167,7 @@ function renderSettings() {
   }
 
   html += `<button class="btn btn-outline" style="margin-bottom:12px;" onclick="logout()">🚪 Sair / Trocar Perfil</button>
-           <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:var(--text3);">📦 Venda Consignada · versão 3.01.00</div><div style="height:12px;"></div>`;
+           <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:var(--text3);">📦 Venda Consignada · versão 3.02.00 <button onclick="showChangelog()" style="background:none;border:none;color:var(--accent2);font-size:12px;cursor:pointer;padding:2px;vertical-align:middle;">❓</button></div><div style="height:12px;"></div>`;
   document.getElementById('content').innerHTML = html;
 }
 
@@ -1208,7 +1266,7 @@ function start() {
       <div class="login-title">Configuração Inicial</div>
       <div class="login-sub">Para sua segurança, crie uma senha de administrador antes de começar.</div>
       <button class="btn btn-primary login-btn" onclick="loginAsAdmin()">Criar Senha de Admin</button>
-      <div style="font-size:11px;color:var(--text3);margin-top:16px;">v3.01.00</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:16px;">v3.02.00</div>
     `;
     return;
   }
