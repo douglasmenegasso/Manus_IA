@@ -121,7 +121,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
     <div class="login-sub">Escolha seu perfil de acesso</div>
     <button class="btn btn-primary login-btn" onclick="loginAsAdmin()">👑 Administrador</button>
     <button class="btn btn-outline login-btn" onclick="loginAsUser()">👤 Usuário</button>
-    <div style="font-size:11px;color:var(--text3);margin-top:16px;">v3.00.01</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:16px;">v3.01.00</div>
   </div>
 </div>
 
@@ -133,7 +133,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
         <div class="header-sub" id="header-sub">Selecione um cliente para iniciar</div>
       </div>
       <div style="text-align:right;">
-        <div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;">v3.00.01</div>
+        <div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;">v3.01.00</div>
         <div id="user-badge" style="font-size:9px;color:var(--accent2);font-weight:700;margin-top:2px;text-transform:uppercase;"></div>
       </div>
     </div>
@@ -1109,7 +1109,7 @@ function renderSettings() {
   }
 
   html += `<button class="btn btn-outline" style="margin-bottom:12px;" onclick="logout()">🚪 Sair / Trocar Perfil</button>
-           <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:var(--text3);">📦 Venda Consignada · versão 3.00.01</div><div style="height:12px;"></div>`;
+           <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:var(--text3);">📦 Venda Consignada · versão 3.01.00</div><div style="height:12px;"></div>`;
   document.getElementById('content').innerHTML = html;
 }
 
@@ -1198,6 +1198,21 @@ function initApp() {
 }
 
 function start() {
+  // Se não houver senha de admin, força a configuração inicial
+  if (!S.adminPass) {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+    // Remove botões normais e mostra aviso de configuração
+    document.querySelector('.login-card').innerHTML = `
+      <div class="login-logo">🛡️</div>
+      <div class="login-title">Configuração Inicial</div>
+      <div class="login-sub">Para sua segurança, crie uma senha de administrador antes de começar.</div>
+      <button class="btn btn-primary login-btn" onclick="loginAsAdmin()">Criar Senha de Admin</button>
+      <div style="font-size:11px;color:var(--text3);margin-top:16px;">v3.01.00</div>
+    `;
+    return;
+  }
+
   if (S.userRole) {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
