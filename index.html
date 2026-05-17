@@ -121,7 +121,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
     <div class="login-sub">Escolha seu perfil de acesso</div>
     <button class="btn btn-primary login-btn" onclick="tryLogin('admin')">👑 Administrador</button>
     <button class="btn btn-outline login-btn" onclick="tryLogin('user')">👤 Usuário</button>
-    <div style="font-size:11px;color:var(--text3);margin-top:16px;">v2.6</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:16px;">v2.7</div>
   </div>
 </div>
 
@@ -133,7 +133,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
         <div class="header-sub" id="header-sub">Selecione um cliente para iniciar</div>
       </div>
       <div style="text-align:right;">
-        <div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;">v2.6</div>
+        <div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;">v2.7</div>
         <div id="user-badge" style="font-size:9px;color:var(--accent2);font-weight:700;margin-top:2px;text-transform:uppercase;"></div>
       </div>
     </div>
@@ -169,6 +169,8 @@ let S = {
   ghRepo:   DB.load('csn_ghrepo',   ''),
   userRole: DB.load('csn_userrole', null), // 'admin' ou 'user'
   adminPass: DB.load('csn_adminpass', ''), // Senha do admin
+  recoveryKey: DB.load('csn_recoverykey', ''), // Chave de recuperação
+  recoveryEmail: DB.load('csn_recoveryemail', ''), // Email de recuperação
   activeClient: null,
   scanMode: 'sale',
   tab: 'scan',
@@ -189,7 +191,7 @@ function save() {
 }
 
 // ══════════════════════════════════════════════════════════
-// LOGIN LOGIC
+// LOGIN & RECOVERY LOGIC
 // ══════════════════════════════════════════════════════════
 function tryLogin(role) {
   if (role === 'user') {
@@ -201,17 +203,18 @@ function tryLogin(role) {
   if (!S.adminPass) {
     showModal(`
       <div class="modal-handle"></div>
-      <div class="modal-title">Configurar Senha</div>
-      <div class="modal-sub">Este é o seu primeiro acesso como Administrador. Crie uma senha para proteger as configurações.</div>
+      <div class="modal-title">Configurar Administrador</div>
+      <div class="modal-sub">Crie uma senha e um e-mail de recuperação para proteger o sistema.</div>
       <div class="form-group">
-        <label class="form-label">Nova Senha de Admin</label>
+        <label class="form-label">Senha de Admin</label>
         <input class="form-input" id="new-pass" type="password" placeholder="Digite uma senha segura"/>
       </div>
       <div class="form-group">
-        <label class="form-label">Confirmar Senha</label>
-        <input class="form-input" id="new-pass-conf" type="password" placeholder="Repita a senha"/>
+        <label class="form-label">E-mail de Recuperação</label>
+        <input class="form-input" id="new-email" type="email" placeholder="seu@email.com"/>
+        <div class="form-hint">Enviaremos sua chave de segurança para este e-mail.</div>
       </div>
-      <button class="btn btn-primary" onclick="setupAdminPass()">Salvar e Entrar</button>
+      <button class="btn btn-primary" onclick="setupAdmin()">Salvar e Enviar Chave</button>
     `);
     return;
   }
@@ -225,21 +228,36 @@ function tryLogin(role) {
       <input class="form-input" id="login-pass" type="password" placeholder="Senha de Admin" autofocus/>
     </div>
     <button class="btn btn-primary" onclick="checkAdminPass()">Entrar</button>
+    <button class="btn btn-outline" style="margin-top:10px;" onclick="showRecoveryModal()">Esqueci a senha</button>
     <button class="btn btn-outline" style="margin-top:10px;" onclick="closeModal()">Cancelar</button>
   `);
   setTimeout(() => document.getElementById('login-pass')?.focus(), 200);
 }
 
-function setupAdminPass() {
-  const p1 = document.getElementById('new-pass').value;
-  const p2 = document.getElementById('new-pass-conf').value;
-  if (!p1) { toast('Digite uma senha', 'err'); return; }
-  if (p1 !== p2) { toast('As senhas não coincidem', 'err'); return; }
+function setupAdmin() {
+  const pass = document.getElementById('new-pass').value;
+  const email = document.getElementById('new-email').value;
+  if (!pass || !email) { toast('Preencha todos os campos', 'err'); return; }
   
-  S.adminPass = p1;
-  DB.save('csn_adminpass', p1);
+  // Gerar chave de recuperação aleatória
+  const key = Math.random().toString(36).substring(2, 10).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+  
+  S.adminPass = pass;
+  S.recoveryEmail = email;
+  S.recoveryKey = key;
+  
+  DB.save('csn_adminpass', pass);
+  DB.save('csn_recoveryemail', email);
+  DB.save('csn_recoverykey', key);
+  
+  // Enviar e-mail via mailto
+  const subject = encodeURIComponent("Chave de Segurança - App Consignado");
+  const body = encodeURIComponent(`Olá!\n\nSua chave de recuperação para o App Consignado é:\n\n${key}\n\nGuarde este e-mail com cuidado. Você precisará desta chave caso esqueça sua senha de administrador.`);
+  window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+  
   closeModal();
   doLogin('admin');
+  toast('Chave enviada para o seu e-mail!', 'ok');
 }
 
 function checkAdminPass() {
@@ -250,6 +268,47 @@ function checkAdminPass() {
   } else {
     toast('Senha incorreta', 'err');
   }
+}
+
+function showRecoveryModal() {
+  showModal(`
+    <div class="modal-handle"></div>
+    <div class="modal-title">Recuperar Acesso</div>
+    <div class="modal-sub">Insira a chave de segurança enviada para o e-mail: <br><b>${S.recoveryEmail || 'seu e-mail cadastrado'}</b></div>
+    <div class="form-group">
+      <label class="form-label">Chave de Segurança</label>
+      <input class="form-input" id="rec-key" placeholder="XXXX-XXXX" style="text-transform:uppercase;"/>
+    </div>
+    <button class="btn btn-primary" onclick="validateRecoveryKey()">Validar Chave</button>
+    <button class="btn btn-outline" style="margin-top:10px;" onclick="closeModal()">Voltar</button>
+  `);
+}
+
+function validateRecoveryKey() {
+  const key = document.getElementById('rec-key').value.trim().toUpperCase();
+  if (key === S.recoveryKey) {
+    showModal(`
+      <div class="modal-handle"></div>
+      <div class="modal-title">Nova Senha</div>
+      <div class="modal-sub">Chave validada com sucesso! Defina sua nova senha de administrador.</div>
+      <div class="form-group">
+        <input class="form-input" id="reset-pass" type="password" placeholder="Nova Senha"/>
+      </div>
+      <button class="btn btn-primary" onclick="resetAdminPass()">Salvar Nova Senha</button>
+    `);
+  } else {
+    toast('Chave inválida', 'err');
+  }
+}
+
+function resetAdminPass() {
+  const p = document.getElementById('reset-pass').value;
+  if (!p) { toast('Digite a nova senha', 'err'); return; }
+  S.adminPass = p;
+  DB.save('csn_adminpass', p);
+  closeModal();
+  doLogin('admin');
+  toast('Senha redefinida com sucesso!', 'ok');
 }
 
 function doLogin(role) {
@@ -302,6 +361,12 @@ async function ghLoad() {
     S.clients  = JSON.parse(JSON.stringify(d.clients  || {}));
     S.orders   = JSON.parse(JSON.stringify(d.orders   || {}));
     S.closed   = JSON.parse(JSON.stringify(d.closed   || []));
+    // Sincronizar dados de segurança se existirem no GitHub
+    if (d.security) {
+      if (!S.adminPass) { S.adminPass = d.security.adminPass; DB.save('csn_adminpass', S.adminPass); }
+      if (!S.recoveryKey) { S.recoveryKey = d.security.recoveryKey; DB.save('csn_recoverykey', S.recoveryKey); }
+      if (!S.recoveryEmail) { S.recoveryEmail = d.security.recoveryEmail; DB.save('csn_recoveryemail', S.recoveryEmail); }
+    }
     S.lastSaved = d.savedAt ? new Date(d.savedAt).getTime() : 0;
     saveLocal();
     return true;
@@ -334,6 +399,11 @@ async function _ghDoSave() {
     clients:  JSON.parse(JSON.stringify(S.clients)),
     orders:   JSON.parse(JSON.stringify(S.orders)),
     closed:   JSON.parse(JSON.stringify(S.closed)),
+    security: {
+      adminPass: S.adminPass,
+      recoveryKey: S.recoveryKey,
+      recoveryEmail: S.recoveryEmail
+    },
     savedAt
   };
   const content = utf8_to_b64(JSON.stringify(d, null, 2));
@@ -387,6 +457,14 @@ async function ghPull() {
       S.clients   = JSON.parse(JSON.stringify(d.clients  || {}));
       S.orders    = JSON.parse(JSON.stringify(d.orders   || {}));
       S.closed    = JSON.parse(JSON.stringify(d.closed   || []));
+      if (d.security) {
+        S.adminPass = d.security.adminPass;
+        S.recoveryKey = d.security.recoveryKey;
+        S.recoveryEmail = d.security.recoveryEmail;
+        DB.save('csn_adminpass', S.adminPass);
+        DB.save('csn_recoverykey', S.recoveryKey);
+        DB.save('csn_recoveryemail', S.recoveryEmail);
+      }
       S.lastSaved = remoteT;
       saveLocal();
       toast('☁️ Dados atualizados de outro dispositivo', 'info');
@@ -1012,7 +1090,8 @@ function renderSettings() {
       </div>
       <div class="card">
         <div class="card-title">🔑 Segurança</div>
-        <button class="btn btn-outline" onclick="changeAdminPass()">Alterar senha de Admin</button>
+        <button class="btn btn-outline" style="margin-bottom:10px;" onclick="changeAdminPass()">Alterar senha de Admin</button>
+        <button class="btn btn-outline" onclick="showRecoveryInfo()">Ver chave de recuperação</button>
       </div>
       <div class="card">
         <div class="card-title" style="color:var(--red);">⚠️ Zona de perigo</div>
@@ -1038,8 +1117,21 @@ function renderSettings() {
   }
 
   html += `<button class="btn btn-outline" style="margin-bottom:12px;" onclick="logout()">🚪 Sair / Trocar Perfil</button>
-           <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:var(--text3);">📦 Consignado App · versão 2.6</div><div style="height:12px;"></div>`;
+           <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:var(--text3);">📦 Consignado App · versão 2.7</div><div style="height:12px;"></div>`;
   document.getElementById('content').innerHTML = html;
+}
+
+function showRecoveryInfo() {
+  showModal(`
+    <div class="modal-handle"></div>
+    <div class="modal-title">Chave de Segurança</div>
+    <div class="modal-sub">Esta chave permite redefinir sua senha de administrador.</div>
+    <div class="card" style="text-align:center;background:var(--bg3);">
+      <div style="font-size:24px;font-weight:800;letter-spacing:2px;color:var(--accent2);">${S.recoveryKey}</div>
+    </div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:16px;">E-mail cadastrado: <b>${S.recoveryEmail}</b></div>
+    <button class="btn btn-primary" onclick="closeModal()">Entendido</button>
+  `);
 }
 
 function changeAdminPass() {
