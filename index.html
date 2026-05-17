@@ -47,17 +47,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .search-wrap{position:relative;margin-bottom:14px;}
 .search-wrap .form-input{padding-left:40px;}
 .search-icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);font-size:16px;pointer-events:none;}
-/* Scanner — auto height based on viewport, max 40vh */
+/* Scanner */
 .scan-box{position:relative;border-radius:var(--radius);overflow:hidden;background:#000;height:min(40vh, 280px);margin-bottom:4px;}
 .scan-box video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
-.scan-toolbar{display:flex;gap:4px;margin-bottom:14px;}
-.scan-toolbar .mode-opt{flex:1;}
-.scan-floating-btn{position:absolute;right:10px;top:10px;z-index:5;width:42px;height:42px;border:none;border-radius:999px;background:rgba(15,15,18,.76);color:#fff;display:none;align-items:center;justify-content:center;font-size:18px;backdrop-filter:blur(6px);cursor:pointer;}
-.scan-floating-btn.active{background:rgba(245,158,11,.88);color:#111;}
-.scan-last-hit{position:absolute;left:50%;bottom:14px;transform:translateX(-50%) translateY(16px);min-width:min(86%,320px);max-width:90%;padding:12px 14px;border-radius:12px;background:rgba(15,15,18,.84);border:1px solid rgba(167,139,250,.45);color:#fff;text-align:center;z-index:4;opacity:0;transition:opacity .16s,transform .16s;backdrop-filter:blur(8px);pointer-events:none;}
-.scan-last-hit.show{opacity:1;transform:translateX(-50%) translateY(0);}
-.scan-last-name{font-size:17px;font-weight:800;line-height:1.2;}
-.scan-last-price{font-size:22px;font-weight:900;color:var(--green);margin-top:2px;}
 .scan-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;}
 .scan-frame{width:70%;height:40%;position:relative;}
 .sc{position:absolute;width:24px;height:24px;border-color:var(--accent2);border-style:solid;}
@@ -125,7 +117,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
         <div class="header-title">📦 Consignado</div>
         <div class="header-sub" id="header-sub">Selecione um cliente para iniciar</div>
       </div>
-      <div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;margin-top:4px;">v2.0</div>
+      <div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;margin-top:4px;">v2.1</div>
     </div>
   </div>
   <div class="content" id="content"></div>
@@ -143,7 +135,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 
 <script>
 // ══════════════════════════════════════════════════════════
-// STATE — plain objects, no limits
+// STATE
 // ══════════════════════════════════════════════════════════
 const DB = {
   load(k, d) { try { const v = localStorage.getItem(k); return v != null ? JSON.parse(v) : d; } catch { return d; } },
@@ -159,7 +151,6 @@ let S = {
   ghRepo:   DB.load('csn_ghrepo',   ''),
   activeClient: null,
   scanMode: 'sale',
-  batchMode: false,
   tab: 'scan',
   lastSaved: null
 };
@@ -173,14 +164,24 @@ function saveLocal() {
 
 function save() {
   saveLocal();
-  S.lastSaved = Date.now(); // Use numeric timestamp, no ISO string comparison issues
+  S.lastSaved = Date.now();
   ghSaveQueued();
 }
 
 // ══════════════════════════════════════════════════════════
-// GITHUB SYNC — queue-based, no SHA conflicts
+// GITHUB SYNC (UTF-8 Corrected)
 // ══════════════════════════════════════════════════════════
 const GH_FILE = 'dados.json';
+
+// Helper para codificar UTF-8 corretamente para Base64
+function utf8_to_b64(str) {
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
+// Helper para decodificar Base64 corretamente para UTF-8
+function b64_to_utf8(str) {
+  return decodeURIComponent(escape(atob(str)));
+}
 
 async function ghReq(method, path, body) {
   if (!S.ghToken || !S.ghRepo) return null;
@@ -201,8 +202,7 @@ async function ghLoad() {
   if (!S.ghToken || !S.ghRepo) return false;
   try {
     const f = await ghReq('GET', GH_FILE);
-    const d = JSON.parse(atob(f.content.replace(/\n/g, '')));
-    // Deep clone to avoid reference issues
+    const d = JSON.parse(b64_to_utf8(f.content.replace(/\n/g, '')));
     S.products = JSON.parse(JSON.stringify(d.products || {}));
     S.clients  = JSON.parse(JSON.stringify(d.clients  || {}));
     S.orders   = JSON.parse(JSON.stringify(d.orders   || {}));
@@ -216,7 +216,6 @@ async function ghLoad() {
   }
 }
 
-// Queue-based save: prevents concurrent requests and SHA conflicts
 let _ghSaving = false;
 let _ghQueued = false;
 
@@ -225,22 +224,16 @@ async function ghSaveQueued() {
   if (_ghSaving) { _ghQueued = true; return; }
   _ghSaving = true;
   _ghQueued = false;
-  try {
-    await _ghDoSave();
-  } catch(e) {
-    // Silent fail for background sync
-  } finally {
+  try { await _ghDoSave(); }
+  catch(e) {}
+  finally {
     _ghSaving = false;
-    if (_ghQueued) {
-      _ghQueued = false;
-      setTimeout(ghSaveQueued, 1000);
-    }
+    if (_ghQueued) { _ghQueued = false; setTimeout(ghSaveQueued, 1000); }
   }
 }
 
 async function _ghDoSave() {
   const savedAt = new Date().toISOString();
-  // Deep clone snapshot at moment of save — prevents partial data issues
   const d = {
     products: JSON.parse(JSON.stringify(S.products)),
     clients:  JSON.parse(JSON.stringify(S.clients)),
@@ -248,31 +241,19 @@ async function _ghDoSave() {
     closed:   JSON.parse(JSON.stringify(S.closed)),
     savedAt
   };
-  const content = btoa(unescape(encodeURIComponent(JSON.stringify(d, null, 2))));
-  // Fetch fresh SHA immediately before PUT
+  const content = utf8_to_b64(JSON.stringify(d, null, 2));
   let sha;
   try { const f = await ghReq('GET', GH_FILE); sha = f.sha; } catch(e) {}
   try {
-    await ghReq('PUT', GH_FILE, {
-      message: 'Sync ' + new Date().toLocaleString('pt-BR'),
-      content,
-      ...(sha ? { sha } : {})
-    });
-    // Update lastSaved to remote time after successful save
+    await ghReq('PUT', GH_FILE, { message: 'Sync ' + new Date().toLocaleString('pt-BR'), content, ...(sha ? { sha } : {}) });
     S.lastSaved = new Date(savedAt).getTime();
   } catch(e) {
     if (e.message && e.message.includes('does not match')) {
       let sha2;
       try { const f2 = await ghReq('GET', GH_FILE); sha2 = f2.sha; } catch(e2) {}
-      await ghReq('PUT', GH_FILE, {
-        message: 'Sync retry ' + new Date().toLocaleString('pt-BR'),
-        content,
-        ...(sha2 ? { sha: sha2 } : {})
-      });
+      await ghReq('PUT', GH_FILE, { message: 'Sync retry ' + new Date().toLocaleString('pt-BR'), content, ...(sha2 ? { sha: sha2 } : {}) });
       S.lastSaved = new Date(savedAt).getTime();
-    } else {
-      throw e;
-    }
+    } else { throw e; }
   }
 }
 
@@ -283,7 +264,6 @@ async function syncNow() {
   catch(e) { toast('Erro: ' + e.message, 'err'); }
 }
 
-// Auto-save every 60s, auto-pull every 30s
 let _saveTimer = null;
 let _pullTimer = null;
 
@@ -303,11 +283,11 @@ async function ghPull() {
   try {
     const f = await ghReq('GET', GH_FILE);
     if (!f) return;
-    const d = JSON.parse(atob(f.content.replace(/\n/g, '')));
+    const d = JSON.parse(b64_to_utf8(f.content.replace(/\n/g, '')));
     if (!d.savedAt) return;
     const remoteT = new Date(d.savedAt).getTime();
     const localT  = S.lastSaved || 0;
-    if (remoteT > localT + 3000) { // 3s tolerance
+    if (remoteT > localT + 3000) {
       S.products  = JSON.parse(JSON.stringify(d.products || {}));
       S.clients   = JSON.parse(JSON.stringify(d.clients  || {}));
       S.orders    = JSON.parse(JSON.stringify(d.orders   || {}));
@@ -317,7 +297,7 @@ async function ghPull() {
       toast('☁️ Dados atualizados de outro dispositivo', 'info');
       refreshCurrentTab();
     }
-  } catch(e) {} // silent fail
+  } catch(e) {}
 }
 
 function refreshCurrentTab() {
@@ -345,170 +325,28 @@ function toast(msg, type = 'ok') {
 }
 
 function showModal(html) {
-  _stopModalScan();
-  scannerPaused = true;
+  _stopScanner();
   document.getElementById('modal-root').innerHTML =
     `<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`;
 }
 function closeModal() {
-  _stopModalScan();
+  _stopScanner();
   document.getElementById('modal-root').innerHTML = '';
-  scannerPaused = false;
-  if (S.tab === 'scan') requestAnimationFrame(() => startMainScan());
 }
 
 // ══════════════════════════════════════════════════════════
-// SCANNER — BrowserMultiFormatReader (confirmed iOS + Android)
-// Critical: reset reader+stream completely before every new scan
+// SCANNER ENGINE (Unified & Optimized)
 // ══════════════════════════════════════════════════════════
-const _LEGACY_IS_IOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const _LEGACY_SCAN_NATIVE_FORMATS = ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'itf', 'qr_code'];
-let _legacyModalScanOn = false;
-let _legacyResumeScanAfterVisibility = false;
-let _legacyScanOverlayTimer = null;
+let _stream  = null;
+let _reader  = null;
+let _scanRAF = null;
+let _bd      = null;
+let _active  = false;
 
-function _makeScannerCtx(kind, videoId, torchBtnId, onDetected) {
-  return {
-    kind,
-    videoId,
-    torchBtnId,
-    onDetected,
-    stream: null,
-    track: null,
-    reader: null,
-    detector: null,
-    mode: '',
-    active: false,
-    starting: false,
-    detecting: false,
-    rafId: 0,
-    lastCode: '',
-    lastCodeAt: 0,
-    lastDetectAt: 0,
-    torchOn: false
-  };
+function _hasBarcodeDetector() {
+  return typeof BarcodeDetector !== 'undefined';
 }
 
-let _legacyMainScanner = _makeScannerCtx('main', 'main-video', 'main-torch-btn', _onMainCode);
-let _legacyModalScanner = _makeScannerCtx('modal', 'modal-video', 'modal-torch-btn', _onModalCode);
-
-async function _getStream() {
-  const idealWidth = IS_IOS ? 1280 : 1920;
-  const idealHeight = IS_IOS ? 720 : 1080;
-  const constraints = {
-    video: {
-      facingMode: { ideal: 'environment' },
-      width: { ideal: idealWidth },
-      height: { ideal: idealHeight }
-    }
-  };
-  try {
-    return await navigator.mediaDevices.getUserMedia(constraints);
-  } catch(e) {
-    try {
-      return await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: 'environment' }, width: { ideal: idealWidth }, height: { ideal: idealHeight } } });
-    } catch(e2) {
-      return await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: idealWidth }, height: { ideal: idealHeight } } });
-    }
-  }
-}
-
-function _makeReader() {
-  const hints = new Map();
-  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-    ZXing.BarcodeFormat.EAN_13,
-    ZXing.BarcodeFormat.EAN_8,
-    ZXing.BarcodeFormat.CODE_128,
-    ZXing.BarcodeFormat.QR_CODE,
-    ZXing.BarcodeFormat.UPC_A,
-    ZXing.BarcodeFormat.UPC_E,
-    ZXing.BarcodeFormat.CODE_39,
-    ZXing.BarcodeFormat.ITF,
-  ]);
-  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-  hints.set(ZXing.DecodeHintType.ALSO_INVERTED, true);
-  hints.set(ZXing.DecodeHintType.ALLOWED_EAN_EXTENSIONS, [2, 5]);
-  return new ZXing.BrowserMultiFormatReader(hints, {
-    delayBetweenScanAttempts: 250,
-    delayBetweenScanSuccess: 1200,
-  });
-}
-
-async function _playVideo(video, stream) {
-  video.srcObject = stream;
-  video.setAttribute('playsinline', '');
-  video.setAttribute('webkit-playsinline', '');
-  video.muted = true;
-  await new Promise((res, rej) => {
-    const tid = setTimeout(() => rej(new Error('timeout')), 10000);
-    const go = () => { clearTimeout(tid); video.play().then(res).catch(rej); };
-    video.readyState >= 3 ? go() : video.addEventListener('canplay', go, { once: true });
-  });
-}
-
-async function startMainScan() {
-  if (location.protocol === 'file:') {
-    _showCamOverlay('Abra via HTTPS (GitHub Pages) para usar a câmera.<br>Use a entrada manual abaixo.', false);
-    return;
-  }
-  const video = document.getElementById('main-video');
-  if (!video) return;
-
-  // Full reset before starting — longer delay prevents black screen
-  const r = _resetReader(_mainReader, _mainStream);
-  _mainReader = r.reader; _mainStream = r.stream;
-  await new Promise(res => setTimeout(res, 500));
-
-  // Show loading state while camera initializes
-  const camOverlay = document.getElementById('cam-overlay');
-  const camMsg = document.getElementById('cam-msg');
-  const camBtn = document.getElementById('cam-btn');
-  if (camOverlay) { camOverlay.style.display = 'flex'; }
-  if (camMsg) camMsg.innerHTML = '⏳ Iniciando câmera…';
-  if (camBtn) camBtn.style.display = 'none';
-
-  try {
-    _mainStream = await _getStream();
-    await _playVideo(video, _mainStream);
-    _hideCamOverlay();
-
-    _mainReader = _makeReader();
-    let last = '', lastT = 0;
-    _mainReader.decodeFromStream(_mainStream, video, (result) => {
-      if (!result) return;
-      const code = result.getText();
-      const now = Date.now();
-      if (code === last && now - lastT < 2500) return;
-      last = code; lastT = now;
-      _onMainCode(code);
-    });
-  } catch(err) {
-    const denied = err.name === 'NotAllowedError' || err.name === 'SecurityError';
-    _showCamOverlay(
-      denied
-        ? '🍎 <b>iPhone:</b> Ajustes → Safari → Câmera → Permitir<br><br>Ou use a entrada manual abaixo.'
-        : 'Câmera não disponível.<br>Use a entrada manual abaixo.',
-      denied
-    );
-  }
-}
-
-function stopMainScan() {
-  const r = _resetReader(_mainReader, _mainStream);
-  _mainReader = r.reader; _mainStream = r.stream;
-}
-
-function _showCamOverlay(msg, showBtn = true) {
-  const o = document.getElementById('cam-overlay'); if (!o) return;
-  o.style.display = 'flex';
-  const m = document.getElementById('cam-msg'); if (m) m.innerHTML = msg;
-  const b = document.getElementById('cam-btn'); if (b) b.style.display = showBtn ? 'flex' : 'none';
-}
-function _hideCamOverlay() { const o = document.getElementById('cam-overlay'); if (o) o.style.display = 'none'; }
-function requestCameraPermission() { _hideCamOverlay(); startMainScan(); }
-
-let _mainLast = '', _mainLastT = 0;
-// ── Beep sound on successful scan ──
 function beep() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -524,72 +362,139 @@ function beep() {
   } catch(e) {}
 }
 
-function _onMainCode(code) {
-  const now = Date.now();
-  if (code === _mainLast && now - _mainLastT < 2000) return;
-  _mainLast = code; _mainLastT = now;
-  beep();
-  handleCode(code);
-}
-
-function toggleModalScan() {
-  if (_modalScanOn) { _stopModalScan(); return; }
-  _modalScanOn = true;
-  const wrap = document.getElementById('modal-scan-wrap');
-  const btn  = document.getElementById('modal-scan-btn');
-  if (wrap) wrap.style.display = 'block';
-  if (btn)  { btn.style.background = 'var(--accent)'; btn.style.borderColor = 'var(--accent)'; btn.textContent = '⏳'; btn.disabled = true; }
-
-  setTimeout(async () => {
-    if (!_modalScanOn) return;
-    const video = document.getElementById('modal-video');
-    const btn2  = document.getElementById('modal-scan-btn');
-    if (!video) { _modalScanOn = false; return; }
-
-    const r = _resetReader(_modalReader, _modalStream);
-    _modalReader = r.reader; _modalStream = r.stream;
-    await new Promise(res => setTimeout(res, 200));
-
-    try {
-      _modalStream = await _getStream();
-      await _playVideo(video, _modalStream);
-      if (btn2) { btn2.textContent = '⏹'; btn2.disabled = false; }
-
-      _modalReader = _makeReader();
-      let last = '', lastT = 0;
-      _modalReader.decodeFromStream(_modalStream, video, (result) => {
-        if (!result || !_modalScanOn) return;
-        const code = result.getText();
-        const now = Date.now();
-        if (code === last && now - lastT < 2500) return;
-        last = code; lastT = now;
-
-        _stopModalScan();
-        const inp = document.getElementById('mp-code');
-        const w   = document.getElementById('modal-scan-wrap');
-        const b   = document.getElementById('modal-scan-btn');
-        if (inp) inp.value = code;
-        if (w)   w.style.display = 'none';
-        if (b)   { b.style.background = 'var(--green)'; b.style.borderColor = 'var(--green)'; b.textContent = '✓'; b.disabled = false; }
-        toast('Código lido!');
-        setTimeout(() => document.getElementById('mp-name')?.focus(), 150);
-      });
-    } catch(err) {
-      _modalScanOn = false;
-      if (btn2) { btn2.style.background = 'var(--bg3)'; btn2.style.borderColor = 'var(--border)'; btn2.textContent = '📷'; btn2.disabled = false; }
-      toast('Câmera indisponível', 'err');
+async function _getStream() {
+  const constraints = {
+    video: {
+      facingMode: { ideal: 'environment' },
+      width:  { ideal: 1280, max: 1920 },
+      height: { ideal: 720,  max: 1080 },
     }
-  }, 300);
+  };
+  try {
+    return await navigator.mediaDevices.getUserMedia(constraints);
+  } catch(e) {
+    try {
+      return await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: 'environment' } } });
+    } catch(e2) {
+      return await navigator.mediaDevices.getUserMedia({ video: true });
+    }
+  }
 }
 
-function _stopModalScan() {
-  _modalScanOn = false;
-  const r = _resetReader(_modalReader, _modalStream);
-  _modalReader = r.reader; _modalStream = r.stream;
-  const wrap = document.getElementById('modal-scan-wrap');
-  const btn  = document.getElementById('modal-scan-btn');
-  if (wrap) wrap.style.display = 'none';
-  if (btn)  { btn.style.background = 'var(--bg3)'; btn.style.borderColor = 'var(--border)'; btn.textContent = '📷'; btn.disabled = false; }
+async function _playVideo(video, stream) {
+  video.srcObject = stream;
+  video.setAttribute('playsinline', '');
+  video.setAttribute('webkit-playsinline', '');
+  video.muted = true;
+  await new Promise((res, rej) => {
+    const tid = setTimeout(() => rej(new Error('timeout')), 10000);
+    const go = () => { clearTimeout(tid); video.play().then(res).catch(rej); };
+    video.readyState >= 3 ? go() : video.addEventListener('canplay', go, { once: true });
+  });
+}
+
+function _makeZXingReader() {
+  const hints = new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+    ZXing.BarcodeFormat.EAN_13,
+    ZXing.BarcodeFormat.EAN_8,
+    ZXing.BarcodeFormat.CODE_128,
+    ZXing.BarcodeFormat.QR_CODE,
+    ZXing.BarcodeFormat.UPC_A,
+    ZXing.BarcodeFormat.UPC_E,
+    ZXing.BarcodeFormat.CODE_39,
+    ZXing.BarcodeFormat.ITF,
+  ]);
+  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+  const reader = new ZXing.BrowserMultiFormatReader(hints, {
+    delayBetweenScanAttempts: 150,
+    delayBetweenScanSuccess: 2000,
+  });
+  return reader;
+}
+
+async function _startBarcodeDetectorLoop(video, onCode) {
+  _bd = new BarcodeDetector({
+    formats: ['ean_13','ean_8','code_128','qr_code','upc_a','upc_e','code_39','itf']
+  });
+  let last = '', lastT = 0;
+  let frameCount = 0;
+
+  async function tick() {
+    if (!_active) return;
+    frameCount++;
+    if (frameCount % 3 !== 0) {
+      _scanRAF = requestAnimationFrame(tick);
+      return;
+    }
+    try {
+      if (video.readyState >= 2) {
+        const results = await _bd.detect(video);
+        if (results && results.length > 0) {
+          const code = results[0].rawValue;
+          const now = Date.now();
+          if (code !== last || now - lastT > 2500) {
+            last = code; lastT = now;
+            onCode(code);
+          }
+        }
+      }
+    } catch(e) {}
+    if (_active) _scanRAF = requestAnimationFrame(tick);
+  }
+  _scanRAF = requestAnimationFrame(tick);
+}
+
+function _stopScanner() {
+  _active = false;
+  if (_scanRAF) { cancelAnimationFrame(_scanRAF); _scanRAF = null; }
+  if (_reader)  { try { _reader.reset(); } catch(e) {} _reader = null; }
+  if (_stream)  { _stream.getTracks().forEach(t => t.stop()); _stream = null; }
+  _bd = null;
+}
+
+async function _startScanner(videoId, onCode, overlayId, msgId, btnId) {
+  const video = document.getElementById(videoId);
+  if (!video) return;
+
+  _stopScanner();
+  _active = true;
+
+  await new Promise(res => setTimeout(res, 300));
+  if (!_active) return;
+
+  const overlay = document.getElementById(overlayId);
+  const msg = document.getElementById(msgId);
+  const btn = document.getElementById(btnId);
+  if (overlay) overlay.style.display = 'flex';
+  if (msg) msg.innerHTML = '⏳ Iniciando câmera…';
+  if (btn) btn.style.display = 'none';
+
+  try {
+    _stream = await _getStream();
+    await _playVideo(video, _stream);
+    if (overlay) overlay.style.display = 'none';
+
+    const wrappedOnCode = (code) => { beep(); onCode(code); };
+
+    if (_hasBarcodeDetector()) {
+      await _startBarcodeDetectorLoop(video, wrappedOnCode);
+    } else {
+      _reader = _makeZXingReader();
+      _reader.decodeFromStream(_stream, video, (result) => {
+        if (!result || !_active) return;
+        wrappedOnCode(result.getText());
+      });
+    }
+  } catch(err) {
+    _active = false;
+    const denied = err.name === 'NotAllowedError' || err.name === 'SecurityError';
+    if (overlay) overlay.style.display = 'flex';
+    if (msg) msg.innerHTML = denied
+        ? '🍎 <b>iPhone:</b> Ajustes → Safari → Câmera → Permitir<br><br>Ou use a entrada manual abaixo.'
+        : 'Câmera não disponível.<br>Use a entrada manual abaixo.';
+    if (btn) btn.style.display = denied ? 'flex' : 'none';
+  }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -599,7 +504,7 @@ function showTab(tab) {
   S.tab = tab;
   ['scan','clients','products','orders','settings'].forEach(t =>
     document.getElementById('nav-' + t).classList.toggle('active', t === tab));
-  stopMainScan();
+  _stopScanner();
   document.getElementById('total-slot').innerHTML = '';
   if      (tab === 'scan')     renderScan();
   else if (tab === 'clients')  renderClients();
@@ -662,7 +567,7 @@ function renderScan() {
     </div>
     <div class="scan-box">
       <video id="main-video" playsinline webkit-playsinline muted autoplay></video>
-      <div class="scan-overlay"><div class="scan-frame" style="width:80%;height:35%;">
+      <div class="scan-overlay"><div class="scan-frame">
         <span class="sc tl"></span><span class="sc tr"></span>
         <span class="sc bl"></span><span class="sc br"></span>
         <div class="scan-line"></div>
@@ -671,7 +576,7 @@ function renderScan() {
         <div style="font-size:40px;">📷</div>
         <div style="font-size:15px;font-weight:700;">Acesso à câmera</div>
         <div id="cam-msg" style="font-size:13px;color:var(--text2);line-height:1.7;max-width:270px;"></div>
-        <button class="btn btn-primary" id="cam-btn" style="width:auto;padding:12px 24px;" onclick="requestCameraPermission()">Permitir câmera</button>
+        <button class="btn btn-primary" id="cam-btn" style="width:auto;padding:12px 24px;" onclick="_startScanner('main-video', handleCode, 'cam-overlay', 'cam-msg', 'cam-btn')">Permitir câmera</button>
       </div>
     </div>
     <div style="text-align:center;font-size:12px;color:var(--text2);margin-bottom:10px;">
@@ -701,7 +606,7 @@ function renderScan() {
        <span style="font-size:22px;font-weight:800;color:var(--green);">${fmt(order.total)}</span></div>`;
   }
 
-  requestAnimationFrame(() => startMainScan());
+  requestAnimationFrame(() => _startScanner('main-video', handleCode, 'cam-overlay', 'cam-msg', 'cam-btn'));
 }
 
 function submitManualCode() {
@@ -733,7 +638,7 @@ function changeQty(code, delta) {
 }
 
 // ══════════════════════════════════════════════════════════
-// ORDER FLOW: open → waiting → paid
+// ORDER FLOW
 // ══════════════════════════════════════════════════════════
 function handleSaleScan(code, product) {
   if (!S.activeClient) { showSelectOrCreateClient(code, product); return; }
@@ -815,14 +720,10 @@ function confirmPayment(clientId) {
 }
 
 // ══════════════════════════════════════════════════════════
-// REGISTER PRODUCT — restart scanner after modal closes
+// REGISTER PRODUCT
 // ══════════════════════════════════════════════════════════
 function showRegisterProduct(code) {
-  if (S.products[code]) {
-    // Already exists — just handle as normal code
-    handleCode(code);
-    return;
-  }
+  if (S.products[code]) { handleCode(code); return; }
   showModal(`
     <div class="modal-handle"></div>
     <div class="modal-title">Produto não cadastrado</div>
@@ -841,7 +742,7 @@ function showRegisterProduct(code) {
 
 function cancelRegister() {
   closeModal();
-  setTimeout(() => startMainScan(), 400);
+  setTimeout(() => _startScanner('main-video', handleCode, 'cam-overlay', 'cam-msg', 'cam-btn'), 400);
 }
 
 function saveProductAndContinue(code) {
@@ -852,9 +753,8 @@ function saveProductAndContinue(code) {
   save();
   closeModal();
   toast('✓ Produto cadastrado!');
-  // Restart scanner then process the code as if scanned again
   setTimeout(() => {
-    startMainScan();
+    _startScanner('main-video', handleCode, 'cam-overlay', 'cam-msg', 'cam-btn');
     setTimeout(() => handleCode(code), 600);
   }, 400);
 }
@@ -923,7 +823,7 @@ function showSelectOrCreateClient(code, product) {
 function selectClientAndAdd(clientId, code) {
   S.activeClient = clientId;
   closeModal();
-  setTimeout(() => { startMainScan(); addToOrder(code, S.products[code]); }, 400);
+  setTimeout(() => { _startScanner('main-video', handleCode, 'cam-overlay', 'cam-msg', 'cam-btn'); addToOrder(code, S.products[code]); }, 400);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -981,7 +881,7 @@ function saveNewClientAndAdd(code) {
   S.clients[id] = { id, name, phone };
   S.activeClient = id;
   save(); closeModal();
-  setTimeout(() => { startMainScan(); addToOrder(code, S.products[code]); }, 400);
+  setTimeout(() => { _startScanner('main-video', handleCode, 'cam-overlay', 'cam-msg', 'cam-btn'); addToOrder(code, S.products[code]); }, 400);
 }
 
 function showEditClient(id) {
@@ -1029,7 +929,6 @@ function showAddItemManual(clientId) {
     </div>
     <div id="add-item-list">${renderList('')}</div>
   `);
-  // expose renderList for inline oninput
   window.renderAddItemList = (q, cid) => {
     const prods = Object.values(S.products);
     const f = q ? prods.filter(p => p.name.toLowerCase().includes(q.toLowerCase()) || p.code.includes(q)) : prods;
@@ -1048,7 +947,6 @@ function addItemToClient(clientId, code) {
   const product = S.products[code]; if (!product) return;
   S.activeClient = clientId;
   addToOrder(code, product);
-  // Refresh the list after adding
   const list = document.getElementById('add-item-list');
   if (list) {
     const q = document.getElementById('add-item-search')?.value || '';
@@ -1168,6 +1066,9 @@ function showAddProductForm() {
           <span class="sc tl"></span><span class="sc tr"></span>
           <span class="sc bl"></span><span class="sc br"></span>
         </div></div>
+        <div class="cam-overlay" id="modal-cam-overlay" style="display:none;">
+          <div id="modal-cam-msg" style="font-size:12px;color:var(--text2);"></div>
+        </div>
       </div>
       <div style="text-align:center;font-size:13px;color:var(--text2);margin-top:8px;">Aponte para o código · ~15cm de distância</div>
     </div>
@@ -1180,6 +1081,20 @@ function showAddProductForm() {
       <div class="form-group"><button class="btn btn-primary" onclick="saveManualProduct()">Salvar</button></div>
     </div>
   `);
+}
+
+let _modalScanOn = false;
+function toggleModalScan() {
+  if (_modalScanOn) { _stopScanner(); _modalScanOn = false; document.getElementById('modal-scan-wrap').style.display = 'none'; return; }
+  _modalScanOn = true;
+  document.getElementById('modal-scan-wrap').style.display = 'block';
+  _startScanner('modal-video', (code) => {
+    document.getElementById('mp-code').value = code;
+    _stopScanner(); _modalScanOn = false;
+    document.getElementById('modal-scan-wrap').style.display = 'none';
+    toast('Código lido!');
+    setTimeout(() => document.getElementById('mp-name')?.focus(), 150);
+  }, 'modal-cam-overlay', 'modal-cam-msg', '');
 }
 
 function saveManualProduct() {
@@ -1381,7 +1296,7 @@ function renderSettings() {
       <p style="font-size:13px;color:var(--text2);margin-bottom:14px;">Apaga todos os dados permanentemente.</p>
       <button class="btn btn-red" onclick="clearAll()">🗑 Apagar todos os dados</button>
     </div>
-    <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:var(--text3);">📦 Consignado App · versão 2.0</div>
+    <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:var(--text3);">📦 Consignado App · versão 2.1</div>
     <div style="height:12px;"></div>`;
 }
 
@@ -1427,7 +1342,7 @@ async function saveGitHubConfig() {
 }
 
 function exportBackup() {
-  const data = { version: 1, exportedAt: new Date().toISOString(), products: S.products, clients: S.clients, orders: S.orders, closed: S.closed };
+  const data = { version: 2, exportedAt: new Date().toISOString(), products: S.products, clients: S.clients, orders: S.orders, closed: S.closed };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
@@ -1476,354 +1391,37 @@ function clearAll() {
 
 function confirmClearAll() {
   S.products = {}; S.clients = {}; S.orders = {}; S.closed = []; S.activeClient = null;
-  save(); closeModal(); toast('Dados apagados'); renderSettings();
+  saveLocal(); // Não apaga o GitHub automaticamente por segurança
+  closeModal(); toast('Dados locais apagados'); renderSettings();
 }
 
 // ══════════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════════
-var scannerPaused = false;
-var IS_IOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-var SCAN_NATIVE_FORMATS = ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'itf', 'qr_code'];
-var _resumeScanAfterVisibility = false;
-var _scanOverlayTimer = null;
-var _mainScanner = null;
-var _modalScanner = null;
-
-function _makeScannerCtx(kind, videoId, torchBtnId, onDetected) {
-  return { kind, videoId, torchBtnId, onDetected, stream:null, track:null, reader:null, detector:null, mode:'', active:false, starting:false, detecting:false, rafId:0, lastCode:'', lastCodeAt:0, lastDetectAt:0, torchOn:false };
-}
-
-function _ensureScannerCtx() {
-  if (!_mainScanner) _mainScanner = _makeScannerCtx('main', 'main-video', 'main-torch-btn', _onMainCodeV2);
-  if (!_modalScanner) _modalScanner = _makeScannerCtx('modal', 'modal-video', 'modal-torch-btn', _onModalCodeV2);
-}
-
-function _resetScannerCtxV2(ctx) {
-  if (!ctx) return;
-  ctx.active = false; ctx.starting = false; ctx.detecting = false;
-  if (ctx.rafId) { cancelAnimationFrame(ctx.rafId); ctx.rafId = 0; }
-  if (ctx.reader) { try { ctx.reader.reset(); } catch(e) {} }
-  if (ctx.stream) ctx.stream.getTracks().forEach(t => t.stop());
-  const video = document.getElementById(ctx.videoId);
-  if (video) { try { video.pause(); } catch(e) {} video.srcObject = null; video.onclick = null; }
-  ctx.stream = null; ctx.track = null; ctx.detector = null; ctx.mode = ''; ctx.torchOn = false;
-  _updateTorchButtonV2(ctx);
-}
-
-async function _getStreamV2() {
-  const idealWidth = IS_IOS ? 1280 : 1920, idealHeight = IS_IOS ? 720 : 1080;
-  const c = { video: { facingMode: { ideal: 'environment' }, width: { ideal: idealWidth }, height: { ideal: idealHeight } } };
-  try { return await navigator.mediaDevices.getUserMedia(c); }
-  catch(e) {
-    try { return await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: 'environment' }, width: { ideal: idealWidth }, height: { ideal: idealHeight } } }); }
-    catch(e2) { return await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: idealWidth }, height: { ideal: idealHeight } } }); }
-  }
-}
-
-async function _setupScannerEngineV2(ctx) {
-  if ('BarcodeDetector' in window) {
-    try {
-      const supported = BarcodeDetector.getSupportedFormats ? await BarcodeDetector.getSupportedFormats() : SCAN_NATIVE_FORMATS;
-      const formats = SCAN_NATIVE_FORMATS.filter(f => supported.includes(f));
-      if (formats.length) { ctx.detector = new BarcodeDetector({ formats }); ctx.mode = 'native'; return; }
-    } catch(e) {}
-  }
-  if (!window.ZXing) throw new Error('ZXing indisponível');
-  if (!ctx.reader) ctx.reader = _makeReader();
-  ctx.mode = 'zxing';
-}
-
-function _updateTorchButtonV2(ctx) {
-  const btn = document.getElementById(ctx.torchBtnId);
-  if (!btn) return;
-  const caps = ctx.track && ctx.track.getCapabilities ? ctx.track.getCapabilities() : {};
-  const hasTorch = !!caps.torch;
-  btn.style.display = hasTorch ? 'flex' : 'none';
-  btn.classList.toggle('active', !!ctx.torchOn);
-  btn.textContent = ctx.torchOn ? '🔦' : '💡';
-}
-
-async function _toggleTorchV2(ctx) {
-  if (!ctx || !ctx.track || !ctx.track.applyConstraints) return;
-  const caps = ctx.track.getCapabilities ? ctx.track.getCapabilities() : {};
-  if (!caps.torch) return;
-  ctx.torchOn = !ctx.torchOn;
-  try { await ctx.track.applyConstraints({ advanced: [{ torch: ctx.torchOn }] }); } catch(e) { ctx.torchOn = !ctx.torchOn; }
-  _updateTorchButtonV2(ctx);
-}
-
-function toggleMainTorch() { _toggleTorchV2(_mainScanner); }
-function toggleModalTorch() { _toggleTorchV2(_modalScanner); }
-
-async function _tapToFocusV2(ctx, event) {
-  if (!ctx || !ctx.track || !ctx.track.applyConstraints) return;
-  const caps = ctx.track.getCapabilities ? ctx.track.getCapabilities() : {};
-  if (!caps.pointsOfInterest) return;
-  const rect = event.currentTarget.getBoundingClientRect();
-  const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-  const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
-  try { await ctx.track.applyConstraints({ advanced: [{ pointsOfInterest: [{ x, y }] }] }); } catch(e) {}
-}
-
-function _deliverCodeV2(ctx, code) {
-  const now = Date.now();
-  if (code === ctx.lastCode && now - ctx.lastCodeAt < 2000) return;
-  ctx.lastCode = code; ctx.lastCodeAt = now; ctx.onDetected(code);
-}
-
-function _runNativeLoopV2(ctx) {
-  const tick = async () => {
-    if (!ctx.active || ctx.mode !== 'native') return;
-    ctx.rafId = requestAnimationFrame(tick);
-    if ((ctx.kind === 'main' && scannerPaused) || document.hidden || ctx.detecting) return;
-    const video = document.getElementById(ctx.videoId);
-    if (!video || video.readyState < 2) return;
-    const now = Date.now();
-    if (now - ctx.lastDetectAt < 150) return;
-    ctx.lastDetectAt = now; ctx.detecting = true;
-    try {
-      const found = await ctx.detector.detect(video);
-      if (found && found.length) {
-        const value = found[0].rawValue || found[0].displayValue || '';
-        if (value) _deliverCodeV2(ctx, value);
-      }
-    } catch(e) {}
-    finally { ctx.detecting = false; }
-  };
-  ctx.rafId = requestAnimationFrame(tick);
-}
-
-function _runZXingLoopV2(ctx, video) {
-  ctx.reader.decodeFromStream(ctx.stream, video, result => {
-    if (!ctx.active || ctx.mode !== 'zxing' || (ctx.kind === 'main' && scannerPaused) || document.hidden) return;
-    if (!result) return;
-    const code = typeof result.getText === 'function' ? result.getText() : (result.text || '');
-    if (code) _deliverCodeV2(ctx, code);
-  });
-}
-
-async function _startScannerV2(ctx) {
-  _ensureScannerCtx();
-  const video = document.getElementById(ctx.videoId);
-  if (!video || ctx.starting) return;
-  if (ctx.kind === 'main' && location.protocol === 'file:') { _showCamOverlay('Abra via HTTPS (GitHub Pages) para usar a câmera.<br>Use a entrada manual abaixo.', false); return; }
-  if (ctx.active && ctx.stream) {
-    video.onclick = ev => _tapToFocusV2(ctx, ev);
-    await _playVideo(video, ctx.stream).catch(() => {});
-    _updateTorchButtonV2(ctx);
-    if (ctx.kind === 'main') _hideCamOverlay();
-    return;
-  }
-  ctx.starting = true;
-  if (ctx.kind === 'main') {
-    const camOverlay = document.getElementById('cam-overlay'), camMsg = document.getElementById('cam-msg'), camBtn = document.getElementById('cam-btn');
-    if (camOverlay) camOverlay.style.display = 'flex';
-    if (camMsg) camMsg.innerHTML = '⏳ Iniciando câmera…';
-    if (camBtn) camBtn.style.display = 'none';
-  }
-  try {
-    ctx.stream = await _getStreamV2();
-    ctx.track = ctx.stream.getVideoTracks()[0] || null;
-    video.onclick = ev => _tapToFocusV2(ctx, ev);
-    await _playVideo(video, ctx.stream);
-    await _setupScannerEngineV2(ctx);
-    ctx.active = true; ctx.lastDetectAt = 0; _updateTorchButtonV2(ctx);
-    if (ctx.kind === 'main') _hideCamOverlay();
-    if (ctx.mode === 'native') _runNativeLoopV2(ctx); else _runZXingLoopV2(ctx, video);
-  } catch(err) {
-    _resetScannerCtxV2(ctx);
-    if (ctx.kind === 'main') {
-      const denied = err.name === 'NotAllowedError' || err.name === 'SecurityError';
-      _showCamOverlay(denied ? '🍎 <b>iPhone:</b> Ajustes → Safari → Câmera → Permitir<br><br>Ou use a entrada manual abaixo.' : 'Câmera não disponível.<br>Use a entrada manual abaixo.', denied);
-    } else toast('Câmera indisponível', 'err');
-  } finally { ctx.starting = false; }
-}
-
-function scanFeedback() { beep(); try { if (navigator.vibrate) navigator.vibrate(50); } catch(e) {} }
-
-function showLastScanOverlay(product) {
-  const el = document.getElementById('scan-last-hit');
-  if (!el || !product) return;
-  el.innerHTML = `<div class="scan-last-name">${product.name}</div><div class="scan-last-price">${fmt(product.price)}</div>`;
-  el.classList.add('show');
-  clearTimeout(_scanOverlayTimer);
-  _scanOverlayTimer = setTimeout(() => el.classList.remove('show'), 1200);
-}
-
-async function startMainScan() { _ensureScannerCtx(); await _startScannerV2(_mainScanner); }
-function stopMainScan() { _ensureScannerCtx(); _resetScannerCtxV2(_mainScanner); }
-function requestCameraPermission() { _hideCamOverlay(); startMainScan(); }
-function _onMainCodeV2(code) { handleCode(code); }
-function _onModalCodeV2(code) {
-  if (!_modalScanOn) return;
-  scanFeedback();
-  _stopModalScan();
-  const inp = document.getElementById('mp-code'), w = document.getElementById('modal-scan-wrap'), b = document.getElementById('modal-scan-btn');
-  if (inp) inp.value = code;
-  if (w) w.style.display = 'none';
-  if (b) { b.style.background = 'var(--green)'; b.style.borderColor = 'var(--green)'; b.textContent = '✓'; b.disabled = false; }
-  toast('Código lido!');
-  setTimeout(() => document.getElementById('mp-name')?.focus(), 150);
-}
-
-function toggleModalScan() {
-  _ensureScannerCtx();
-  if (_modalScanOn) { _stopModalScan(); return; }
-  _modalScanOn = true;
-  const wrap = document.getElementById('modal-scan-wrap'), btn = document.getElementById('modal-scan-btn');
-  if (wrap) wrap.style.display = 'block';
-  if (btn) { btn.style.background = 'var(--accent)'; btn.style.borderColor = 'var(--accent)'; btn.textContent = '⏳'; btn.disabled = true; }
-  requestAnimationFrame(async () => {
-    if (!_modalScanOn) return;
-    await _startScannerV2(_modalScanner);
-    const btn2 = document.getElementById('modal-scan-btn');
-    if (!_modalScanOn) return;
-    if (btn2) { btn2.textContent = '⏹'; btn2.disabled = false; }
-  });
-}
-
-function _stopModalScan() {
-  _ensureScannerCtx();
-  _modalScanOn = false;
-  _resetScannerCtxV2(_modalScanner);
-  const wrap = document.getElementById('modal-scan-wrap'), btn = document.getElementById('modal-scan-btn');
-  if (wrap) wrap.style.display = 'none';
-  if (btn) { btn.style.background = 'var(--bg3)'; btn.style.borderColor = 'var(--border)'; btn.textContent = '📷'; btn.disabled = false; }
-}
-
-function refreshScanScreen() { if (S.tab === 'scan') renderScanUI(); }
-function toggleBatchMode() { S.batchMode = !S.batchMode; refreshScanScreen(); }
-function setScanMode(m) { S.scanMode = m; refreshScanScreen(); }
-function activateScanTab(clientId, mode) { if (clientId) S.activeClient = clientId; if (mode) S.scanMode = mode; closeModal(); if (S.tab === 'scan') renderScan(); else showTab('scan'); }
-
-function showTab(tab) {
-  const leavingScan = S.tab === 'scan' && tab !== 'scan';
-  S.tab = tab;
-  ['scan','clients','products','orders','settings'].forEach(t => document.getElementById('nav-' + t).classList.toggle('active', t === tab));
-  if (leavingScan) stopMainScan();
-  document.getElementById('total-slot').innerHTML = '';
-  if      (tab === 'scan')     renderScan();
-  else if (tab === 'clients')  renderClients();
-  else if (tab === 'products') renderProducts();
-  else if (tab === 'orders')   renderOrders();
-  else if (tab === 'settings') renderSettings();
-}
-
-function renderScan() {
-  if (!document.getElementById('scan-root')) {
-    document.getElementById('content').innerHTML = `
-      <div id="scan-root">
-        <div id="scan-top-ui"></div>
-        <div class="scan-box">
-          <video id="main-video" playsinline webkit-playsinline muted autoplay></video>
-          <button class="scan-floating-btn" id="main-torch-btn" onclick="toggleMainTorch()" title="Lanterna">💡</button>
-          <div class="scan-last-hit" id="scan-last-hit"></div>
-          <div class="scan-overlay"><div class="scan-frame" style="width:80%;height:35%;"><span class="sc tl"></span><span class="sc tr"></span><span class="sc bl"></span><span class="sc br"></span><div class="scan-line"></div></div></div>
-          <div class="cam-overlay" id="cam-overlay" style="display:none;"><div style="font-size:40px;">📷</div><div style="font-size:15px;font-weight:700;">Acesso à câmera</div><div id="cam-msg" style="font-size:13px;color:var(--text2);line-height:1.7;max-width:270px;"></div><button class="btn btn-primary" id="cam-btn" style="width:auto;padding:12px 24px;" onclick="requestCameraPermission()">Permitir câmera</button></div>
-        </div>
-        <div style="text-align:center;font-size:12px;color:var(--text2);margin-bottom:10px;">📏 Mantenha o código centralizado · distância ~15cm</div>
-        <div class="manual-bar"><input class="form-input" id="manual-code" placeholder="Ou digite o código…" inputmode="numeric" autocomplete="off"/><button onclick="submitManualCode()">Buscar</button></div>
-        <div id="scan-bottom-ui"></div>
-        <div style="height:16px;"></div>
-      </div>`;
-    document.getElementById('manual-code').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitManualCode(); } });
-  }
-  renderScanUI();
-  requestAnimationFrame(() => startMainScan());
-}
-
-function renderScanUI() {
-  const client = S.activeClient ? S.clients[S.activeClient] : null, order = S.activeClient ? S.orders[S.activeClient] : null, items = order ? Object.values(order.items || {}) : [], status = order ? (order.status || 'open') : 'open';
-  const clientBanner = client ? `<div class="client-card" onclick="showClientPicker()" style="margin-bottom:4px;"><div class="avatar" style="width:44px;height:44px;font-size:16px;background:var(--accent);">${initials(client.name)}</div><div style="flex:1;"><div style="font-size:15px;font-weight:600;">${client.name}</div><div style="font-size:12px;color:var(--text2);">${client.phone || 'Sem telefone'}</div></div><div style="font-size:20px;color:var(--text2);">›</div></div>` : `<button class="btn btn-outline" onclick="showClientPicker()" style="margin-bottom:4px;">👤 Selecionar / Novo Cliente</button>`;
-  const statusBanner = (order && items.length && status === 'waiting') ? `<div class="status-banner status-waiting">⏳ Aguardando devolução — pode adicionar ou devolver itens</div>` : '';
-  const itemsHtml = items.length ? `<div class="card"><div class="card-title">Itens no pedido</div>${items.map(i => `<div class="item-row"><div class="item-icon">📦</div><div class="item-info"><div class="item-name">${i.name}</div><div class="item-sub">${i.code}</div></div><div class="qty-ctrl"><button class="qty-btn" onclick="changeQty('${i.code}',-1)">−</button><span class="qty-num">${i.qty}</span><button class="qty-btn" onclick="changeQty('${i.code}',1)">+</button></div><div class="item-price">${fmt(i.price * i.qty)}</div></div>`).join('')}</div>` : '';
-  let actionBtns = '';
-  if (client && items.length) actionBtns = status === 'open' ? `<button class="btn btn-amber" style="margin-bottom:10px;" onclick="setOrderWaiting()">⏳ Finalizar pedido (aguardar devolução)</button>` : `<button class="btn btn-green" style="margin-bottom:10px;" onclick="showPaymentModal()">💰 Registrar pagamento</button><button class="btn btn-outline" style="margin-bottom:10px;" onclick="reopenOrder()">↩ Reabrir pedido</button>`;
-  document.getElementById('scan-top-ui').innerHTML = `<div style="margin-bottom:12px;">${clientBanner}</div><div class="scan-toolbar"><button class="mode-opt ${S.scanMode === 'sale' ? 'active' : ''}" onclick="setScanMode('sale')">🛒 Venda</button><button class="mode-opt ${S.scanMode === 'return' ? 'active' : ''}" onclick="setScanMode('return')">↩ Devolução</button><button class="mode-opt ${S.batchMode ? 'active' : ''}" onclick="toggleBatchMode()">📦 Lote</button></div>`;
-  document.getElementById('scan-bottom-ui').innerHTML = `${S.activeClient ? `<button class="btn btn-outline" style="margin-bottom:10px;font-size:13px;" onclick="showAddItemManual('${S.activeClient}')">🔍 Buscar produto por nome</button>` : ''}${statusBanner}${itemsHtml}${actionBtns}`;
-  document.getElementById('header-sub').textContent = client ? `Cliente: ${client.name}` : 'Selecione um cliente para iniciar';
-  document.getElementById('total-slot').innerHTML = order && items.length ? `<div class="total-bar"><span style="font-size:14px;color:var(--text2);">Total</span><span style="font-size:22px;font-weight:800;color:var(--green);">${fmt(order.total)}</span></div>` : '';
-}
-
-function changeQty(code, delta) {
-  const order = S.orders[S.activeClient];
-  if (!order || !order.items[code]) return;
-  order.items[code].qty += delta;
-  order.total = Math.max(0, (order.total || 0) + delta * order.items[code].price);
-  if (order.items[code].qty <= 0) delete order.items[code];
-  save(); refreshScanScreen();
-}
-
-function handleReturnScan(code, product) {
-  if (!S.activeClient) { toast('Selecione um cliente', 'err'); return; }
-  const order = S.orders[S.activeClient];
-  if (!order || !order.items[code] || order.items[code].qty <= 0) { toast('Item não está no pedido deste cliente', 'err'); return; }
-  order.items[code].qty--; order.total = Math.max(0, (order.total || 0) - product.price);
-  if (order.items[code].qty === 0) delete order.items[code];
-  save(); scanFeedback(); showLastScanOverlay(product); if (!S.batchMode) toast(`↩ Devolvido: ${product.name}`); refreshScanScreen();
-}
-
-function addToOrder(code, product) {
-  if (!S.orders[S.activeClient]) S.orders[S.activeClient] = { clientId: S.activeClient, items: {}, total: 0, status: 'open' };
-  const order = S.orders[S.activeClient];
-  if (order.items[code]) order.items[code].qty++; else order.items[code] = { code, name: product.name, price: product.price, qty: 1 };
-  order.total = (order.total || 0) + product.price;
-  save(); scanFeedback(); showLastScanOverlay(product); if (!S.batchMode) toast(`✓ ${product.name}`); refreshScanScreen();
-}
-
-function setOrderWaiting() { const order = S.orders[S.activeClient]; if (!order) return; order.status = 'waiting'; save(); toast('⏳ Aguardando devolução'); refreshScanScreen(); }
-function reopenOrder() { const order = S.orders[S.activeClient]; if (!order) return; order.status = 'open'; save(); toast('Pedido reaberto'); refreshScanScreen(); }
-function cancelRegister() { closeModal(); }
-function saveProductAndContinue(code) { const name = document.getElementById('rp-name').value.trim(), price = parseFloat(document.getElementById('rp-price').value); if (!name || isNaN(price) || price <= 0) { toast('Preencha todos os campos', 'err'); return; } S.products[code] = { code, name, price }; save(); closeModal(); toast('✓ Produto cadastrado!'); setTimeout(() => handleCode(code), 60); }
-function selectClient(id) { S.activeClient = id; S.scanMode = 'sale'; closeModal(); if (S.tab === 'scan') renderScan(); else showTab('scan'); }
-function selectClientAndAdd(clientId, code) { S.activeClient = clientId; closeModal(); addToOrder(code, S.products[code]); }
-function saveNewClient(redirect) { const { name, phone } = _readCF(); if (!name) { toast('Preencha o nome', 'err'); return; } const id = phone ? phone.replace(/\D/g, '') : 'c_' + Date.now(); S.clients[id] = { id, name, phone }; save(); closeModal(); toast(`Cliente ${name} cadastrado!`); if (redirect) showTab(redirect); else if (S.tab === 'scan') renderScan(); }
-function saveNewClientAndAdd(code) { const { name, phone } = _readCF(); if (!name) { toast('Preencha o nome', 'err'); return; } const id = phone ? phone.replace(/\D/g, '') : 'c_' + Date.now(); S.clients[id] = { id, name, phone }; S.activeClient = id; save(); closeModal(); addToOrder(code, S.products[code]); }
-
-function showAddProductForm() {
-  showModal(`<div class="modal-handle"></div><div class="modal-title">Cadastrar Produto</div><div class="form-group"><label class="form-label">Código de barras / QR Code *</label><div style="display:flex;gap:8px;align-items:center;"><input class="form-input" id="mp-code" placeholder="Ex: 7891234567890" style="flex:1;" inputmode="numeric"/><button class="scan-icon-btn" id="modal-scan-btn" onclick="toggleModalScan()" title="Escanear">📷</button></div></div><div id="modal-scan-wrap" style="display:none;margin-bottom:14px;"><div class="scan-box" style="height:200px;max-height:200px;"><video id="modal-video" playsinline webkit-playsinline muted autoplay></video><button class="scan-floating-btn" id="modal-torch-btn" onclick="toggleModalTorch()" title="Lanterna">💡</button><div class="scan-overlay"><div class="scan-frame" style="width:80%;height:50%;"><span class="sc tl"></span><span class="sc tr"></span><span class="sc bl"></span><span class="sc br"></span></div></div></div><div style="text-align:center;font-size:13px;color:var(--text2);margin-top:8px;">Aponte para o código · ~15cm de distância</div></div><div class="form-group"><label class="form-label">Descrição *</label><input class="form-input" id="mp-name" placeholder="Ex: Camisa Polo Azul M"/></div><div class="form-group"><label class="form-label">Valor (R$) *</label><input class="form-input" id="mp-price" type="number" step="0.01" placeholder="0,00" inputmode="decimal"/></div><div class="row"><div class="form-group"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button></div><div class="form-group"><button class="btn btn-primary" onclick="saveManualProduct()">Salvar</button></div></div>`);
-}
-
-function showClientDetail(id) {
-  const c = S.clients[id], order = S.orders[id], items = order ? Object.values(order.items || {}) : [], st = order?.status || 'open';
-  showModal(`<div class="modal-handle"></div><div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;"><div class="avatar" style="width:52px;height:52px;font-size:20px;background:var(--accent);">${initials(c.name)}</div><div><div class="modal-title" style="margin-bottom:2px;">${c.name}</div><div style="font-size:14px;color:var(--text2);">${c.phone ? '📱 ' + c.phone : 'Sem telefone'}</div></div></div><button class="btn btn-outline" style="margin-bottom:10px;" onclick="showEditClient('${id}')">✏️ Editar dados</button>${items.length ? `${st === 'waiting' ? `<div class="status-banner status-waiting" style="margin-bottom:12px;">⏳ Aguardando devolução</div>` : ''}<div class="card" style="margin-bottom:12px;"><div class="card-title">Pedido</div>${items.map(i => `<div class="item-row"><div class="item-info"><div class="item-name">${i.name}</div><div class="item-sub">Qtd: ${i.qty}</div></div><div class="item-price">${fmt(i.price * i.qty)}</div></div>`).join('')}<div class="divider"></div><div style="display:flex;justify-content:space-between;"><span style="font-weight:600;">Total</span><span style="color:var(--green);font-weight:700;font-size:18px;">${fmt(order.total)}</span></div></div><button class="btn btn-primary" style="margin-bottom:10px;" onclick="activateScanTab('${id}','sale')">🛒 Escanear / Adicionar itens</button><button class="btn btn-outline" style="margin-bottom:10px;" onclick="showAddItemManual('${id}')">🔍 Buscar produto manualmente</button>${st === 'open' ? `<button class="btn btn-amber" style="margin-bottom:10px;" onclick="S.activeClient='${id}';closeModal();setOrderWaiting()">⏳ Finalizar (aguardar devolução)</button>` : ''}${st === 'waiting' ? `<button class="btn btn-green" style="margin-bottom:10px;" onclick="S.activeClient='${id}';closeModal();showPaymentModal()">💰 Registrar pagamento</button>` : ''}` : `<div style="padding:12px 0;text-align:center;color:var(--text2);font-size:14px;margin-bottom:12px;">Sem pedido em aberto</div><button class="btn btn-primary" style="margin-bottom:10px;" onclick="activateScanTab('${id}','sale')">🛒 Criar pedido</button>`}<button class="btn btn-red btn-sm" style="width:auto;margin:4px auto 0;" onclick="deleteClient('${id}')">🗑 Excluir</button>`);
-}
-
-function showOrderDetail(clientId) {
-  const client = S.clients[clientId], order = S.orders[clientId]; if (!order) return;
-  const items = Object.values(order.items || {}), st = order.status || 'open';
-  showModal(`<div class="modal-handle"></div><div class="modal-title">${client.name}</div><div class="modal-sub">${client.phone ? '📱 ' + client.phone : 'Sem telefone'}</div>${st === 'waiting' ? `<div class="status-banner status-waiting" style="margin-bottom:12px;">⏳ Aguardando devolução</div>` : ''}<div class="card" style="margin-bottom:16px;">${items.map(i => `<div class="item-row"><div class="item-icon">📦</div><div class="item-info"><div class="item-name">${i.name}</div><div class="item-sub">${i.code} · Qtd: ${i.qty}</div></div><div class="item-price">${fmt(i.price * i.qty)}</div></div>`).join('')}<div class="divider"></div><div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-weight:600;">Total</span><span style="color:var(--green);font-size:20px;font-weight:800;">${fmt(order.total)}</span></div></div>${st === 'waiting' ? `<button class="btn btn-green" style="margin-bottom:10px;" onclick="S.activeClient='${clientId}';closeModal();showPaymentModal()">💰 Registrar pagamento</button><button class="btn btn-primary" style="margin-bottom:10px;" onclick="activateScanTab('${clientId}','return')">↩ Registrar devolução</button><button class="btn btn-primary" style="margin-bottom:10px;" onclick="activateScanTab('${clientId}','sale')">🛒 Adicionar itens</button><button class="btn btn-outline" style="margin-bottom:10px;" onclick="S.activeClient='${clientId}';closeModal();reopenOrder()">↩ Reabrir pedido</button>` : `<button class="btn btn-amber" style="margin-bottom:10px;" onclick="S.activeClient='${clientId}';closeModal();setOrderWaiting()">⏳ Finalizar (aguardar devolução)</button><button class="btn btn-primary" style="margin-bottom:10px;" onclick="activateScanTab('${clientId}','sale')">🛒 Adicionar itens</button>`}<button class="btn btn-outline" onclick="closeModal()">Fechar</button>`);
-}
-
 async function init() {
+  // Renderiza a interface imediatamente com dados locais
+  showTab('scan');
+  
+  // Carrega dados do GitHub em segundo plano
   if (S.ghToken && S.ghRepo) {
-    try { await ghLoad(); } catch(e) {}
+    try { 
+      const updated = await ghLoad(); 
+      if (updated) {
+        // Se houve atualização, re-renderiza a aba atual
+        refreshCurrentTab();
+      }
+    } catch(e) {
+      console.error('Erro no carregamento inicial do GitHub:', e);
+    }
   }
   startAutoSync();
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      _resumeScanAfterVisibility = S.tab === 'scan';
-      stopMainScan();
-      _stopModalScan();
-    } else if (_resumeScanAfterVisibility && S.tab === 'scan') {
-      requestAnimationFrame(() => startMainScan());
-    }
-  });
-  window.addEventListener('pagehide', () => {
-    _resumeScanAfterVisibility = S.tab === 'scan';
-    stopMainScan();
-    _stopModalScan();
-  });
-  showTab('scan');
 }
 
-(function loadZXing() {
-  const s = document.createElement('script');
-  s.src = 'https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js';
-  s.onload = () => init();
-  s.onerror = () => { console.error('ZXing load failed'); init(); };
-  document.head.appendChild(s);
+(function loadLibs() {
+  const zxing = document.createElement('script');
+  zxing.src = 'https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js';
+  zxing.onload = init;
+  document.head.appendChild(zxing);
 })();
 </script>
 </body>
