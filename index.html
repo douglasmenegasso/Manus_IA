@@ -114,14 +114,14 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 </style>
 </head>
 <body>
-<div id="login-screen" style="display:none;">
+<div id="login-screen">
   <div class="login-card">
     <div class="login-logo">📦</div>
     <div class="login-title">Consignado</div>
     <div class="login-sub">Escolha seu perfil de acesso</div>
     <button class="btn btn-primary login-btn" onclick="tryLogin('admin')">👑 Administrador</button>
     <button class="btn btn-outline login-btn" onclick="tryLogin('user')">👤 Usuário</button>
-    <div style="font-size:11px;color:var(--text3);margin-top:16px;">v2.7</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:16px;">v2.8</div>
   </div>
 </div>
 
@@ -133,7 +133,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
         <div class="header-sub" id="header-sub">Selecione um cliente para iniciar</div>
       </div>
       <div style="text-align:right;">
-        <div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;">v2.7</div>
+        <div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;">v2.8</div>
         <div id="user-badge" style="font-size:9px;color:var(--accent2);font-weight:700;margin-top:2px;text-transform:uppercase;"></div>
       </div>
     </div>
@@ -239,7 +239,6 @@ function setupAdmin() {
   const email = document.getElementById('new-email').value;
   if (!pass || !email) { toast('Preencha todos os campos', 'err'); return; }
   
-  // Gerar chave de recuperação aleatória
   const key = Math.random().toString(36).substring(2, 10).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
   
   S.adminPass = pass;
@@ -250,7 +249,6 @@ function setupAdmin() {
   DB.save('csn_recoveryemail', email);
   DB.save('csn_recoverykey', key);
   
-  // Enviar e-mail via mailto
   const subject = encodeURIComponent("Chave de Segurança - App Consignado");
   const body = encodeURIComponent(`Olá!\n\nSua chave de recuperação para o App Consignado é:\n\n${key}\n\nGuarde este e-mail com cuidado. Você precisará desta chave caso esqueça sua senha de administrador.`);
   window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
@@ -317,7 +315,7 @@ function doLogin(role) {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('user-badge').textContent = role === 'admin' ? '👑 Admin' : '👤 Usuário';
-  init();
+  initApp();
 }
 
 function logout() {
@@ -330,10 +328,9 @@ function logout() {
 }
 
 // ══════════════════════════════════════════════════════════
-// GITHUB SYNC (UTF-8 Corrected)
+// GITHUB SYNC
 // ══════════════════════════════════════════════════════════
 const GH_FILE = 'dados.json';
-
 function utf8_to_b64(str) { return btoa(unescape(encodeURIComponent(str))); }
 function b64_to_utf8(str) { return decodeURIComponent(escape(atob(str))); }
 
@@ -361,7 +358,6 @@ async function ghLoad() {
     S.clients  = JSON.parse(JSON.stringify(d.clients  || {}));
     S.orders   = JSON.parse(JSON.stringify(d.orders   || {}));
     S.closed   = JSON.parse(JSON.stringify(d.closed   || []));
-    // Sincronizar dados de segurança se existirem no GitHub
     if (d.security) {
       if (!S.adminPass) { S.adminPass = d.security.adminPass; DB.save('csn_adminpass', S.adminPass); }
       if (!S.recoveryKey) { S.recoveryKey = d.security.recoveryKey; DB.save('csn_recoverykey', S.recoveryKey); }
@@ -399,11 +395,7 @@ async function _ghDoSave() {
     clients:  JSON.parse(JSON.stringify(S.clients)),
     orders:   JSON.parse(JSON.stringify(S.orders)),
     closed:   JSON.parse(JSON.stringify(S.closed)),
-    security: {
-      adminPass: S.adminPass,
-      recoveryKey: S.recoveryKey,
-      recoveryEmail: S.recoveryEmail
-    },
+    security: { adminPass: S.adminPass, recoveryKey: S.recoveryKey, recoveryEmail: S.recoveryEmail },
     savedAt
   };
   const content = utf8_to_b64(JSON.stringify(d, null, 2));
@@ -555,6 +547,7 @@ async function _playVideo(video, stream) {
 }
 
 function _makeZXingReader() {
+  if (typeof ZXing === 'undefined') return null;
   const hints = new Map();
   hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
     ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.CODE_128,
@@ -613,6 +606,7 @@ async function _startScanner(videoId, onCode, overlayId, msgId, btnId) {
     if (_hasBarcodeDetector()) { await _startBarcodeDetectorLoop(video, wrappedOnCode); }
     else {
       _reader = _makeZXingReader();
+      if (!_reader) { throw new Error('ZXing not loaded'); }
       _reader.decodeFromStream(_stream, video, (result) => { if (!result || !_active) return; wrappedOnCode(result.getText()); });
     }
   } catch(err) {
@@ -862,11 +856,11 @@ function renderPickerList(clients, q) {
   const f = clients.filter(c => (c.name || '').toLowerCase().includes(q.toLowerCase()) || (c.phone || '').includes(q));
   if (!f.length) return `<div style="text-align:center;padding:16px;color:var(--text2);font-size:14px;">Nenhum resultado</div>`;
   return f.map(c => {
-    const o = S.orders[c.id]; const st = o?.status;
+    const o = S.orders[c.id]; const count = o ? Object.keys(o.items || {}).length : 0; const st = o?.status;
     return `<div class="client-card" onclick="selectClient('${c.id}')">
       <div class="avatar" style="width:44px;height:44px;font-size:16px;background:var(--accent);">${initials(c.name)}</div>
       <div style="flex:1;"><div style="font-size:15px;font-weight:600;">${c.name}</div><div style="font-size:12px;color:var(--text2);">${c.phone || 'Sem telefone'}</div>
-      ${o && Object.keys(o.items || {}).length ? `<div style="font-size:12px;color:${st === 'waiting' ? 'var(--amber)' : 'var(--green)'};margin-top:2px;">${fmt(o.total)} · ${st === 'waiting' ? '⏳ Aguardando' : 'Em aberto'}</div>` : ''}</div>
+      ${count > 0 ? `<div style="font-size:12px;color:${st === 'waiting' ? 'var(--amber)' : 'var(--green)'};margin-top:2px;">${fmt(o.total)} · ${st === 'waiting' ? '⏳ Aguardando' : 'Em aberto'}</div>` : ''}</div>
       <div style="font-size:20px;color:var(--text2);">›</div>
     </div>`;
   }).join('');
@@ -1117,7 +1111,7 @@ function renderSettings() {
   }
 
   html += `<button class="btn btn-outline" style="margin-bottom:12px;" onclick="logout()">🚪 Sair / Trocar Perfil</button>
-           <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:var(--text3);">📦 Consignado App · versão 2.7</div><div style="height:12px;"></div>`;
+           <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:var(--text3);">📦 Consignado App · versão 2.8</div><div style="height:12px;"></div>`;
   document.getElementById('content').innerHTML = html;
 }
 
@@ -1197,28 +1191,33 @@ function confirmClearAll() { S.products = {}; S.clients = {}; S.orders = {}; S.c
 // ══════════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════════
-async function init() {
-  if (!S.userRole) {
-    document.getElementById('login-screen').style.display = 'flex';
-    document.getElementById('app').style.display = 'none';
-    return;
-  }
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'flex';
-  document.getElementById('user-badge').textContent = S.userRole === 'admin' ? '👑 Admin' : '👤 Usuário';
-  
+function initApp() {
   showTab('scan');
   if (S.ghToken && S.ghRepo) {
-    try { const updated = await ghLoad(); if (updated) refreshCurrentTab(); } catch(e) {}
+    ghLoad().then(updated => { if (updated) refreshCurrentTab(); }).catch(() => {});
   }
   startAutoSync();
+}
+
+function start() {
+  if (S.userRole) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    document.getElementById('user-badge').textContent = S.userRole === 'admin' ? '👑 Admin' : '👤 Usuário';
+    initApp();
+  } else {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+  }
 }
 
 (function loadLibs() {
   const zxing = document.createElement('script');
   zxing.src = 'https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js';
-  zxing.onload = init;
+  zxing.async = true;
+  zxing.onload = () => { console.log('ZXing loaded'); };
   document.head.appendChild(zxing);
+  start();
 })();
 </script>
 </body>
