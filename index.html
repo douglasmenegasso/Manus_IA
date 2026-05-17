@@ -119,9 +119,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
     <div class="login-logo">📦</div>
     <div class="login-title">Consignado</div>
     <div class="login-sub">Escolha seu perfil de acesso</div>
-    <button class="btn btn-primary login-btn" id="btn-login-admin" onclick="tryLogin('admin')">👑 Administrador</button>
-    <button class="btn btn-outline login-btn" id="btn-login-user" onclick="tryLogin('user')">👤 Usuário</button>
-    <div style="font-size:11px;color:var(--text3);margin-top:16px;">v2.9</div>
+    <button class="btn btn-primary login-btn" onclick="loginAsAdmin()">👑 Administrador</button>
+    <button class="btn btn-outline login-btn" onclick="loginAsUser()">👤 Usuário</button>
+    <div style="font-size:11px;color:var(--text3);margin-top:16px;">v3.0</div>
   </div>
 </div>
 
@@ -133,7 +133,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
         <div class="header-sub" id="header-sub">Selecione um cliente para iniciar</div>
       </div>
       <div style="text-align:right;">
-        <div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;">v2.9</div>
+        <div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;">v3.0</div>
         <div id="user-badge" style="font-size:9px;color:var(--accent2);font-weight:700;margin-top:2px;text-transform:uppercase;"></div>
       </div>
     </div>
@@ -193,14 +193,13 @@ function save() {
 // ══════════════════════════════════════════════════════════
 // LOGIN & RECOVERY LOGIC
 // ══════════════════════════════════════════════════════════
-function tryLogin(role) {
-  console.log('Tentando login como:', role);
-  if (role === 'user') {
-    doLogin('user');
-    return;
-  }
-  
-  // Se for admin e não tiver senha cadastrada
+function loginAsUser() {
+  console.log('Login direto como Usuário');
+  doLogin('user');
+}
+
+function loginAsAdmin() {
+  console.log('Iniciando fluxo de Admin');
   if (!S.adminPass) {
     showModal(`
       <div class="modal-handle"></div>
@@ -217,22 +216,20 @@ function tryLogin(role) {
       </div>
       <button class="btn btn-primary" onclick="setupAdmin()">Salvar e Enviar Chave</button>
     `);
-    return;
+  } else {
+    showModal(`
+      <div class="modal-handle"></div>
+      <div class="modal-title">Acesso Restrito</div>
+      <div class="modal-sub">Digite a senha de Administrador para continuar.</div>
+      <div class="form-group">
+        <input class="form-input" id="login-pass" type="password" placeholder="Senha de Admin" autofocus/>
+      </div>
+      <button class="btn btn-primary" onclick="checkAdminPass()">Entrar</button>
+      <button class="btn btn-outline" style="margin-top:10px;" onclick="showRecoveryModal()">Esqueci a senha</button>
+      <button class="btn btn-outline" style="margin-top:10px;" onclick="closeModal()">Cancelar</button>
+    `);
+    setTimeout(() => document.getElementById('login-pass')?.focus(), 200);
   }
-
-  // Se for admin e já tiver senha
-  showModal(`
-    <div class="modal-handle"></div>
-    <div class="modal-title">Acesso Restrito</div>
-    <div class="modal-sub">Digite a senha de Administrador para continuar.</div>
-    <div class="form-group">
-      <input class="form-input" id="login-pass" type="password" placeholder="Senha de Admin" autofocus/>
-    </div>
-    <button class="btn btn-primary" onclick="checkAdminPass()">Entrar</button>
-    <button class="btn btn-outline" style="margin-top:10px;" onclick="showRecoveryModal()">Esqueci a senha</button>
-    <button class="btn btn-outline" style="margin-top:10px;" onclick="closeModal()">Cancelar</button>
-  `);
-  setTimeout(() => document.getElementById('login-pass')?.focus(), 200);
 }
 
 function setupAdmin() {
@@ -1112,7 +1109,7 @@ function renderSettings() {
   }
 
   html += `<button class="btn btn-outline" style="margin-bottom:12px;" onclick="logout()">🚪 Sair / Trocar Perfil</button>
-           <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:var(--text3);">📦 Consignado App · versão 2.9</div><div style="height:12px;"></div>`;
+           <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:var(--text3);">📦 Consignado App · versão 3.0</div><div style="height:12px;"></div>`;
   document.getElementById('content').innerHTML = html;
 }
 
