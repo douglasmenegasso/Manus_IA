@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Consignado">
-<title>Consignado App</title>
+<title>Venda Consignada</title>
 <style>
 :root{
   --bg:#0f0f12;--bg2:#18181f;--bg3:#22222c;--surface:#1e1e28;
@@ -73,7 +73,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 .client-card{background:var(--bg3);border-radius:var(--radius-sm);padding:12px 14px;display:flex;align-items:center;gap:12px;margin-bottom:8px;cursor:pointer;border:1px solid transparent;transition:border-color .15s;}
 .client-card:active{border-color:var(--accent);}
 .avatar{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;flex-shrink:0;}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:100;animation:fadeIn .15s;padding:20px;}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:2000;animation:fadeIn .15s;padding:20px;}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 .modal{background:var(--bg2);border-radius:var(--radius);width:100%;max-width:400px;padding:24px;max-height:90dvh;overflow-y:auto;animation:modalPop .2s;box-shadow:0 20px 40px rgba(0,0,0,0.4);border:1px solid var(--border);}
 @keyframes modalPop{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}
@@ -117,11 +117,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
 <div id="login-screen">
   <div class="login-card">
     <div class="login-logo">📦</div>
-    <div class="login-title">Consignado</div>
+    <div class="login-title">Venda Consignada</div>
     <div class="login-sub">Escolha seu perfil de acesso</div>
     <button class="btn btn-primary login-btn" onclick="loginAsAdmin()">👑 Administrador</button>
     <button class="btn btn-outline login-btn" onclick="loginAsUser()">👤 Usuário</button>
-    <div style="font-size:11px;color:var(--text3);margin-top:16px;">v3.1</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:16px;">v3.00.01</div>
   </div>
 </div>
 
@@ -129,11 +129,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
   <div class="header">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;">
       <div>
-        <div class="header-title">📦 Consignado</div>
+        <div class="header-title">📦 Venda Consignada</div>
         <div class="header-sub" id="header-sub">Selecione um cliente para iniciar</div>
       </div>
       <div style="text-align:right;">
-        <div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;">v3.1</div>
+        <div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;">v3.00.01</div>
         <div id="user-badge" style="font-size:9px;color:var(--accent2);font-weight:700;margin-top:2px;text-transform:uppercase;"></div>
       </div>
     </div>
@@ -1109,7 +1109,7 @@ function renderSettings() {
   }
 
   html += `<button class="btn btn-outline" style="margin-bottom:12px;" onclick="logout()">🚪 Sair / Trocar Perfil</button>
-           <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:var(--text3);">📦 Consignado App · versão 3.1</div><div style="height:12px;"></div>`;
+           <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:var(--text3);">📦 Venda Consignada · versão 3.00.01</div><div style="height:12px;"></div>`;
   document.getElementById('content').innerHTML = html;
 }
 
