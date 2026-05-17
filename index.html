@@ -119,9 +119,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
     <div class="login-logo">📦</div>
     <div class="login-title">Consignado</div>
     <div class="login-sub">Escolha seu perfil de acesso</div>
-    <button class="btn btn-primary login-btn" onclick="doLogin('admin')">👑 Administrador</button>
-    <button class="btn btn-outline login-btn" onclick="doLogin('user')">👤 Usuário</button>
-    <div style="font-size:11px;color:var(--text3);margin-top:16px;">v2.5</div>
+    <button class="btn btn-primary login-btn" onclick="tryLogin('admin')">👑 Administrador</button>
+    <button class="btn btn-outline login-btn" onclick="tryLogin('user')">👤 Usuário</button>
+    <div style="font-size:11px;color:var(--text3);margin-top:16px;">v2.6</div>
   </div>
 </div>
 
@@ -133,7 +133,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--f
         <div class="header-sub" id="header-sub">Selecione um cliente para iniciar</div>
       </div>
       <div style="text-align:right;">
-        <div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;">v2.5</div>
+        <div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;">v2.6</div>
         <div id="user-badge" style="font-size:9px;color:var(--accent2);font-weight:700;margin-top:2px;text-transform:uppercase;"></div>
       </div>
     </div>
@@ -168,6 +168,7 @@ let S = {
   ghToken:  DB.load('csn_ghtoken',  ''),
   ghRepo:   DB.load('csn_ghrepo',   ''),
   userRole: DB.load('csn_userrole', null), // 'admin' ou 'user'
+  adminPass: DB.load('csn_adminpass', ''), // Senha do admin
   activeClient: null,
   scanMode: 'sale',
   tab: 'scan',
@@ -190,6 +191,67 @@ function save() {
 // ══════════════════════════════════════════════════════════
 // LOGIN LOGIC
 // ══════════════════════════════════════════════════════════
+function tryLogin(role) {
+  if (role === 'user') {
+    doLogin('user');
+    return;
+  }
+  
+  // Se for admin e não tiver senha cadastrada
+  if (!S.adminPass) {
+    showModal(`
+      <div class="modal-handle"></div>
+      <div class="modal-title">Configurar Senha</div>
+      <div class="modal-sub">Este é o seu primeiro acesso como Administrador. Crie uma senha para proteger as configurações.</div>
+      <div class="form-group">
+        <label class="form-label">Nova Senha de Admin</label>
+        <input class="form-input" id="new-pass" type="password" placeholder="Digite uma senha segura"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirmar Senha</label>
+        <input class="form-input" id="new-pass-conf" type="password" placeholder="Repita a senha"/>
+      </div>
+      <button class="btn btn-primary" onclick="setupAdminPass()">Salvar e Entrar</button>
+    `);
+    return;
+  }
+
+  // Se for admin e já tiver senha
+  showModal(`
+    <div class="modal-handle"></div>
+    <div class="modal-title">Acesso Restrito</div>
+    <div class="modal-sub">Digite a senha de Administrador para continuar.</div>
+    <div class="form-group">
+      <input class="form-input" id="login-pass" type="password" placeholder="Senha de Admin" autofocus/>
+    </div>
+    <button class="btn btn-primary" onclick="checkAdminPass()">Entrar</button>
+    <button class="btn btn-outline" style="margin-top:10px;" onclick="closeModal()">Cancelar</button>
+  `);
+  setTimeout(() => document.getElementById('login-pass')?.focus(), 200);
+}
+
+function setupAdminPass() {
+  const p1 = document.getElementById('new-pass').value;
+  const p2 = document.getElementById('new-pass-conf').value;
+  if (!p1) { toast('Digite uma senha', 'err'); return; }
+  if (p1 !== p2) { toast('As senhas não coincidem', 'err'); return; }
+  
+  S.adminPass = p1;
+  DB.save('csn_adminpass', p1);
+  closeModal();
+  doLogin('admin');
+}
+
+function checkAdminPass() {
+  const p = document.getElementById('login-pass').value;
+  if (p === S.adminPass) {
+    closeModal();
+    doLogin('admin');
+  } else {
+    toast('Senha incorreta', 'err');
+  }
+}
+
 function doLogin(role) {
   S.userRole = role;
   DB.save('csn_userrole', role);
@@ -949,6 +1011,10 @@ function renderSettings() {
         <label style="display:block;"><div class="btn btn-outline" style="cursor:pointer;">⬆️ Importar backup</div><input type="file" accept=".json" onchange="importBackup(event)" style="display:none;"/></label>
       </div>
       <div class="card">
+        <div class="card-title">🔑 Segurança</div>
+        <button class="btn btn-outline" onclick="changeAdminPass()">Alterar senha de Admin</button>
+      </div>
+      <div class="card">
         <div class="card-title" style="color:var(--red);">⚠️ Zona de perigo</div>
         <p style="font-size:13px;color:var(--text2);margin-bottom:14px;">Apaga todos os dados permanentemente.</p>
         <button class="btn btn-red" onclick="clearAll()">🗑 Apagar todos os dados</button>
@@ -972,8 +1038,35 @@ function renderSettings() {
   }
 
   html += `<button class="btn btn-outline" style="margin-bottom:12px;" onclick="logout()">🚪 Sair / Trocar Perfil</button>
-           <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:var(--text3);">📦 Consignado App · versão 2.5</div><div style="height:12px;"></div>`;
+           <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:var(--text3);">📦 Consignado App · versão 2.6</div><div style="height:12px;"></div>`;
   document.getElementById('content').innerHTML = html;
+}
+
+function changeAdminPass() {
+  showModal(`
+    <div class="modal-handle"></div>
+    <div class="modal-title">Alterar Senha</div>
+    <div class="form-group">
+      <label class="form-label">Senha Atual</label>
+      <input class="form-input" id="old-pass" type="password"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Nova Senha</label>
+      <input class="form-input" id="upd-pass" type="password"/>
+    </div>
+    <button class="btn btn-primary" onclick="updateAdminPass()">Atualizar Senha</button>
+  `);
+}
+
+function updateAdminPass() {
+  const oldP = document.getElementById('old-pass').value;
+  const newP = document.getElementById('upd-pass').value;
+  if (oldP !== S.adminPass) { toast('Senha atual incorreta', 'err'); return; }
+  if (!newP) { toast('Digite a nova senha', 'err'); return; }
+  S.adminPass = newP;
+  DB.save('csn_adminpass', newP);
+  closeModal();
+  toast('Senha atualizada!');
 }
 
 function disconnectGitHub() {
@@ -981,7 +1074,7 @@ function disconnectGitHub() {
   S.ghToken = ''; S.ghRepo = ''; DB.save('csn_ghtoken', ''); DB.save('csn_ghrepo', ''); stopAutoSync(); toast('GitHub desconectado', 'info'); renderSettings();
 }
 function showGitHubSetup() {
-  showModal(`<div class="modal-handle"></div><div class="modal-title">🔗 Configurar GitHub</div><div class="form-group"><label class="form-label">Repositório (usuário/repo) *</label><input class="form-input" id="gh-repo" placeholder="Ex: douglasmenegasso/Consignado" value="${S.ghRepo}"/></div><div class="form-group"><label class="form-label">Token de acesso (PAT) *</label><input class="form-input" id="gh-token" type="password" placeholder="ghp_xxxxxxxxxxxx" value="${S.ghToken}"/><div class="form-hint">github.com → foto de perfil → Settings → Developer settings → Personal access tokens → Tokens (classic) → marque <b>repo</b></div></div><div class="row"><div class="form-group"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button></div><div class="form-group"><button class="btn btn-primary" onclick="saveGitHubConfig()">Salvar e testar</button></div></div>`);
+  showModal(`<div class="modal-handle"></div><div class="modal-title">🔗 Configurar GitHub</div><div class="form-group"><label class="form-label">Repositório (usuário/repo) *</label><input class="form-input" id="gh-repo" placeholder="Ex: douglas/Consignado" value="${S.ghRepo}"/></div><div class="form-group"><label class="form-label">Token de acesso (PAT) *</label><input class="form-input" id="gh-token" type="password" placeholder="ghp_xxxxxxxxxxxx" value="${S.ghToken}"/><div class="form-hint">github.com → foto de perfil → Settings → Developer settings → Personal access tokens → Tokens (classic) → marque <b>repo</b></div></div><div class="row"><div class="form-group"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button></div><div class="form-group"><button class="btn btn-primary" onclick="saveGitHubConfig()">Salvar e testar</button></div></div>`);
 }
 async function saveGitHubConfig() {
   const repo = document.getElementById('gh-repo').value.trim(); const token = document.getElementById('gh-token').value.trim();
